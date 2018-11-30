@@ -12,6 +12,8 @@ def get_backbone(m='resnet50', pretrained=False):
         return models.resnet50(pretrained=pretrained)
     if m == 'resnet101':
         return models.resnet101(pretrained=pretrained)
+    if m == 'pyramid':
+        return FeaturePyramidResNet()
     else:
         raise Exception('Invalid backbone model passed.')
 
