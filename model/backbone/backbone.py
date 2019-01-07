@@ -8,9 +8,9 @@ import torchvision.models as models
 
 def get_backbone(m='resnet50', pretrained=False):
     if m == 'resnet50':
-        return models.resnet50(pretrained=pretrained)
+        return get_resnet(50)
     if m == 'resnet101':
-        return models.resnet101(pretrained=pretrained)
+        return get_resnet(101)
     if m == 'pyramid':
         return FeaturePyramidResNet()
     else:
@@ -74,6 +74,19 @@ class FeaturePyramidResNet(nn.Module):
         final_result = torch.Tensor(ps)
         return final_result
 
+def get_resnet(nlayers=50):
+    base = None
+    if nlayers == 50:
+        base = models.resnet50(pretrained=True)
+    elif nlayers == 101:
+        base = models.resnet101(pretrained=True)
+    else:
+        raise NotImplementedError()
+    # now build from the base a sequential object with the subpieces of the network
+    backbone = nn.Sequential(base.conv1, base.bn1, base.relu,
+            base.maxpool, base.layer1, base.layer2,
+            base.layer3)
+    return backbone
 
 if __name__ == '__main__':
     pass
