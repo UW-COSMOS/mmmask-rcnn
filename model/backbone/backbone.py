@@ -86,6 +86,7 @@ def get_resnet(nlayers=50):
     backbone = nn.Sequential(base.conv1, base.bn1, base.relu,
             base.maxpool, base.layer1, base.layer2,
             base.layer3, base.layer4)
+    backbone.output_depth = 2048
     return backbone
 
 if __name__ == '__main__':
