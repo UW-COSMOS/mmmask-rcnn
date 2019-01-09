@@ -8,7 +8,7 @@ from model.backbone.backbone import get_backbone
 from model.rpn.rpn import RPN
 from model.head.object_classifier import MultiModalClassifier
 from model.proposal.proposal_layer import ProposalLayer
-from model.roi.roi_pool import ROIPool
+from model.roi.roi_align import ROIAlign
 class MMFasterRCNN(nn.Module):
     def __init__(self, kwargs):
         """
@@ -41,27 +41,41 @@ class MMFasterRCNN(nn.Module):
             kwargs["PROPOSAL"]["NMS_THRESHOLD"]
         )
         #TODO spatial scale?
-        self.ROI_pooling = ROIPool(
-            kwargs["ROI_POOL"]["OUTPUT_SIZE"],
-            kwargs["ROI_POOL"]["SPATIAL_SCALE"]
+        output_size = (kwargs["ROI_POOL"]["OUTPUT_SIZE"],kwargs["ROI_POOL"]["OUTPUT_SIZE"])
+        self.ROI_pooling = ROIAlign(
+            output_size,
+            kwargs["ROI_POOL"]["SPATIAL_SCALE"],
+            kwargs["ROI_POOL"]["SAMPLING_RATIO"]
         )
-        self.head = MultiModalClassifier()
         #add code to default to using the index as the name
         self.cls_names = kwargs["CLASSES"]["NAMES"]
+        self.classification_head = MultiModalClassifier(kwargs["ROI_POOL"]["OUTPUT_SIZE"],
+                                                        kwargs["ROI_POOL"]["OUTPUT_SIZE"],
+                                                        self.backbone.output_depth,
+                                                        kwargs["HEAD"]["INTERMEDIATE"],
+                                                        len(self.cls_names))
 
     def forward(self, img):
         """
         Process an Image through the network
-        :param img: [SIZE x SIZE x 3] tensor
+        :param img: [Nx3xSIZE x SIZE] tensor
         :param mask: boolean mask of which anchors to process
             if None, all anchors are processed
         :return: [(cls_index,[x1, y1, x2, y2])] for each non bg-class
         """
         feature_map = self.backbone.forward(img)
-        cls_branch_preds, cls_branch_scores, bbox_branch = self.RPN(feature_map)
-        rois = self.proposal_layer(cls_branch_preds, bbox_branch)
+        print(f"feature map: {feature_map.shape}")
+        rpn_cls_branch_preds, rpn_cls_branch_scores, rpn_bbox_branch =\
+            self.RPN(feature_map)
+        print(f"rpn_cls_banch: {rpn_cls_branch_preds.shape}")
+        print(f"bbox branch:{rpn_bbox_branch.shape}")
+        rois = self.proposal_layer(rpn_cls_branch_preds, rpn_bbox_branch)
+        print(f"rois : {rois.shape}")
         #TODO this will break batching without a reshape
-        maps = torch.stack([self.ROI_pooling(roi) for roi in rois])
+        maps = self.ROI_pooling(feature_map, rois)
+        print(f"maps: {maps.shape}")
+        cls_preds, cls_scores, bbox_deltas = self.classification_head(maps)
+        return rpn_cls_branch_scores, rpn_bbox_branch,cls_preds, cls_scores, bbox_deltas
 
 
 

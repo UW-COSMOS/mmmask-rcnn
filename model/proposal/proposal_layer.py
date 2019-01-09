@@ -51,7 +51,7 @@ def bbox_transform_inv(boxes, deltas, batch_size):
 
 class ProposalLayer(nn.Module):
     def __init__(self, feat_stride, ratios, scales, image_size=1920, NMS_PRE=3000, NMS_POST=300, min_size=64, threshold=0.6):
-        super(ProposalLayer).__init__()
+        super(ProposalLayer,self).__init__()
         #TODO figure out how this is calculated
         self.feat_stride = feat_stride
         self.ratios = ratios
@@ -62,7 +62,7 @@ class ProposalLayer(nn.Module):
         self.threshold = threshold
         self.min_size = min_size
         self.anchors = torch.from_numpy(generate_anchors(scales=np.array(scales),ratios=np.array(ratios))).float()
-        self.num_anchors = self.anchors(0)
+        self.num_anchors = self.anchors.size(0)
 
     def forward(self, cls_scores, bbox_preds):
         """
@@ -71,9 +71,11 @@ class ProposalLayer(nn.Module):
         :param cls_scores: [N x K x H x W x 2 ] of scores not probabilities
         :return:
         """
+        #TODO this doesn't yet support batching
         batch_size = bbox_preds.size(0)
         # drop bg probs
-        cls_probs = cls_scores[:, :, :, :, 0]
+        idx_keep = torch.arange(0,cls_scores.size(1),2)
+        cls_probs = cls_scores[:,idx_keep, :, :]
         # get size of feature map
         map_h, map_w = cls_scores.size(2), cls_scores.size(3)
         # get shifts
@@ -90,9 +92,10 @@ class ProposalLayer(nn.Module):
         # reshape to (K*A, 4) shifted anchors
         A = self.num_anchors
         K = shifts.size(0)
-        anchors = self._anchors.reshape((1, A, 4)) + \
-                  shifts.reshape((1, K, 4)).transpose((1, 0, 2))
-        anchors = anchors.reshape((K * A, 4))
+        shifts = shifts.float()
+        anchors = self.anchors.reshape((1, A, 4)) + \
+                  shifts.reshape((1, K, 4)).transpose(1, 0)
+        anchors = anchors.reshape((1,K * A, 4))
 
         # Transpose and reshape predicted bbox transformations to get them
         # into the same order as the anchors:
@@ -101,16 +104,23 @@ class ProposalLayer(nn.Module):
         # transpose to (1, H, W, 4 * A)
         # reshape to (1 * H * W * A, 4) where rows are ordered by (h, w, a)
         # in slowest to fastest order
-        bbox_deltas = bbox_preds.transpose((0, 2, 3, 1)).reshape((-1, 4))
+        # want to use bbox_preds.transpose(0, 2, 3, 1)
+        # but pytorch only supports formal transpositions
+        bbox_preds = bbox_preds.transpose(1, 2)
+        bbox_preds = bbox_preds.transpose(2, 3)
+        bbox_deltas = bbox_preds.reshape((1,-1, 4))
 
         # Same story for the scores:
         #
         # scores are (1, A, H, W) format
         # transpose to (1, H, W, A)
         # reshape to (1 * H * W * A, 1) where rows are ordered by (h, w, a)
-        scores = cls_scores.transpose((0, 2, 3, 1)).reshape((-1, 1))
+        cls_scores = cls_scores.transpose(1, 2)
+        cls_scores = cls_scores.transpose(2, 3)
+        scores = cls_scores.reshape((-1, 1))
 
         # Convert anchors into proposals via bbox transformations
+        print(anchors.shape)
         proposals = bbox_transform_inv(anchors, bbox_deltas, batch_size)
         # 2. clip predicted boxes to image
         proposals = clip_boxes(proposals, (self.image_size, self.image_size), batch_size)
@@ -140,13 +150,12 @@ class ProposalLayer(nn.Module):
             # 7. take after_nms_topN (e.g. 300)
             # 8. return the top proposals (-> RoIs top)
 
-            keep_idx_i = nms(torch.cat((proposals_single, scores_single), 1), self.threshold, force_cpu=True)
+            keep_idx_i = nms(torch.cat((proposals_single, scores_single), 1).detach(), self.threshold, force_cpu=True)
             keep_idx_i = keep_idx_i.long().view(-1)
 
             if self.NMS_POST > 0:
                 keep_idx_i = keep_idx_i[:self.NMS_POST]
             proposals_single = proposals_single[keep_idx_i, :]
-            scores_single = scores_single[keep_idx_i, :]
 
             # padding 0 at the end.
             num_proposal = proposals_single.size(0)

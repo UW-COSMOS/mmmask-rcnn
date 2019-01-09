@@ -44,7 +44,7 @@ def generate_anchors(base_size=16, ratios=[0.5, 1, 2],
     Generate anchor (reference) windows by enumerating aspect ratios X
     scales wrt a reference (0, 0, 15, 15) window.
     """
-
+    ratios = np.array(ratios)
     base_anchor = np.array([1, 1, base_size, base_size])
     ratio_anchors = _ratio_enum(base_anchor, ratios)
     anchors = np.vstack([_scale_enum(ratio_anchors[i, :], scales)
@@ -80,7 +80,6 @@ def _ratio_enum(anchor, ratios):
     """
     Enumerate a set of anchors for each aspect ratio wrt an anchor.
     """
-
     w, h, x_ctr, y_ctr = _whctrs(anchor)
     size = w * h
     size_ratios = size / ratios

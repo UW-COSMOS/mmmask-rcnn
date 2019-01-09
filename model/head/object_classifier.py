@@ -17,11 +17,11 @@ class MultiModalClassifier(nn.Module):
         :param intermediate: the dimensionality of the intermediate FC layer
         :param ncls: the number of classes
         """
-        super(MultiModalClassifier).__init__(self)
+        super(MultiModalClassifier, self).__init__()
         self.height = pool_height
         self.width = pool_width
         self.depth = pool_depth
-        self.FC = nn.Linear((self.height, self.width, self.depth), (intermediate,1))
+        self.FC = nn.Linear(self.height*self.width*self.depth, intermediate)
         self.FC_2 = nn.Linear(intermediate, intermediate)
         self.cls_branch = nn.Linear(intermediate, ncls)
         self.bbox_branch = nn.Linear(intermediate, 4*ncls)
@@ -33,8 +33,10 @@ class MultiModalClassifier(nn.Module):
         :param roi_maps: [NxHxWxD]
         :return:
         """
+        print(self.height,self.width,self.depth)
+        x = roi_maps.view(-1, self.depth * self.width * self.height)
         #TODO support batching
-        x = self.FC(roi_maps)
+        x = self.FC(x)
         x = relu(x)
         x = self.FC_2(x)
         x = relu(x)
