@@ -74,8 +74,8 @@ class FeaturePyramidResNet(nn.Module):
         final_result = torch.Tensor(ps)
         return final_result
 
+
 def get_resnet(nlayers=50):
-    base = None
     if nlayers == 50:
         base = models.resnet50(pretrained=True)
     elif nlayers == 101:

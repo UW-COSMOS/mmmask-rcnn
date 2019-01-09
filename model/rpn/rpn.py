@@ -15,6 +15,7 @@ class RPN(nn.Module):
         :param input_depth: number of filters coming out of the backbone
         :param size: window size of RPN (kernel)
         """
+        super(RPN, self).__init__()
         stride = 1
         padding = 1
         bias = True
@@ -47,4 +48,4 @@ class RPN(nn.Module):
         """
         cls_branch_preds = F.softmax(cls_branch_scores, dim=2)
         bbox_branch_preds  = self.RPN_bbox_pred(x)
-        return cls_branch_preds, bbox_branch_preds
+        return cls_branch_preds,cls_branch_scores, bbox_branch_preds

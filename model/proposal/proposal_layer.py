@@ -64,7 +64,7 @@ class ProposalLayer(nn.Module):
         self.anchors = torch.from_numpy(generate_anchors(scales=np.array(scales),ratios=np.array(ratios))).float()
         self.num_anchors = self.anchors(0)
 
-    def forward(self, bbox_preds, cls_scores):
+    def forward(self, cls_scores, bbox_preds):
         """
         process proposals from the RPN
         :param bbox_preds: [N x K x H x W x 4 ]
