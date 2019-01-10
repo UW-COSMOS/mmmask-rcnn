@@ -6,7 +6,7 @@ Author: Josh McGrath
 import numpy as np
 import torch
 from torch import nn
-from .generate_anchors import generate_anchors
+from utils.generate_anchors import generate_anchors
 from model.nms.nms_wrapper import nms
 
 
