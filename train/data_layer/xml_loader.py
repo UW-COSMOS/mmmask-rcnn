@@ -4,6 +4,66 @@ meant to work with the GTDataset class
 Author: Josh McGrath
 """
 import os
+from os.path import splitext
+from skimage import io
+import torch
+from xml.etree import ElementTree as ET
+
+
+def mapper(obj):
+    """
+    map a single object to the list structure
+    :param obj: an Etree node
+    :return: (type, (x1, y1, x2, y2))
+    """
+    bnd = obj.find("bndbox")
+    coords = ["xmin", "ymin", "xmax", "ymax"]
+    return obj.find("name").text, [int(float(bnd.find(coord).text)) for coord in coords]
+
+
+def xml2list(fp):
+    """
+    convert VOC XML to a list
+    :param fp: file path to VOC XML file
+    :return: [(type,(x1, y1, x2, y2))]
+    """
+    tree = ET.parse(fp)
+    root = tree.getroot()
+    objects = root.findall("object")
+    lst = [mapper(obj) for obj in objects]
+    lst.sort(key=lambda x: x[1])
+    return lst
+
+
+def load_image(base_path, identifier, img_type):
+    """
+    load an image into memory
+    :param base_path: base path to image
+    :param identifier:
+    :param img_type:
+    :return: [3 x SIZE x SIZE] tensor
+    """
+    path = os.path.join(base_path, f"{identifier}.{img_type}")
+    # reads in as [SIZE x SIZE x 3]
+    img_data = io.imread(path)
+    img_data = img_data.transpose((2, 0, 1))
+    img_data = torch.from_numpy(img_data)
+    return img_data
+
+def load_gt(xml_dir, identifier):
+    """
+    Load an XML ground truth document
+    :param xml_dir: base path to xml
+    :param identifier: xml document identifier
+    :return: [K x 4] Tensor, [cls_names]
+    """
+    path = os.path.join(xml_dir, f"{identifier}.xml")
+    as_lst = xml2list(path)
+    cls_list, tensor_list = zip(*as_lst)
+    # convert to tensors
+    gt_boxes = torch.tensor(tensor_list)
+    return gt_boxes, cls_list
+
 
 
 class XMLLoader:
@@ -22,11 +82,20 @@ class XMLLoader:
         self.xml_dir = xml_dir
         self.img_dir = img_dir
         self.img_type = img_type
-        # TODO match these so we can index them jointly
-        self.annnotations = os.listdir(xml_dir)
-        self.images = os.listdir(img_dir)
+        self.imgs = os.listdir(img_dir)
+        self.identifiers = [splitext(img) for img in self.imgs]
         self.num_images = len(self.annotations)
 
     def size(self):
         return self.num_images
+
+    def __getitem__(self, item):
+        identifier = self.identifiers[item]
+        img = load_image(self.img_dir, identifier, self.img_type)
+        gt = load_gt(self.xml_dir, identifier)
+        return img, gt
+
+
+
+
 
