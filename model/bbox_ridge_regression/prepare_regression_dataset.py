@@ -65,7 +65,7 @@ def associate_proposed_to_gt(proposed_boxes, gt_boxes):
     return final_output
 
 
-def write_datasets_from_xmls(proposed_xmls_dir, gt_xmls_dir):
+def write_datasets_from_xmls(proposed_xmls_dir, gt_xmls_dir, feature_map_dir):
     cls_file_handles = {}
     for f in os.listdir(proposed_xmls_dir):
         proposed_file = os.path.join(proposed_xmls_dir, f)
@@ -99,7 +99,7 @@ def write_datasets_from_xmls(proposed_xmls_dir, gt_xmls_dir):
 
             if key not in cls_file_handles:
                 key_fh = open(f'{key}.csv', 'w')
-                key_fh.write('input_center_x,input_center_y,input_width,input_height,target_center_x,target_center_y,target_width,target_height\n')
+                key_fh.write('img_name,input_center_x,input_center_y,input_width,input_height,target_center_x,target_center_y,target_width,target_height\n')
                 cls_file_handles[key] = key_fh
             fh = cls_file_handles[key]
             for result in results:
@@ -107,7 +107,7 @@ def write_datasets_from_xmls(proposed_xmls_dir, gt_xmls_dir):
                 target = result[1]
                 inp_x, inp_y, inp_width, inp_height = coordinates_to_anchor(inp)
                 target_x, target_y, target_width, target_height = coordinates_to_anchor(target)
-                fh.write(f'{inp_x},{inp_y},{inp_width},{inp_height},{target_x},{target_y},{target_width},{target_height}\n')
+                fh.write(f'{f},{inp_x},{inp_y},{inp_width},{inp_height},{target_x},{target_y},{target_width},{target_height}\n')
     for fh_key in cls_file_handles:
         fh = cls_file_handles[fh_key]
         fh.close()
