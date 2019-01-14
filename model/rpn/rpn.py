@@ -30,6 +30,7 @@ class RPN(nn.Module):
         # 2*num_anchors out
         self.ncls_out = 2 * self.num_anchors
         self.RPN_cls_score = nn.Conv2d(output_depth, self.ncls_out, 1, 1)
+        self.RPN_cls_score.bias = torch.nn.Parameter(torch.ones(self.RPN_cls_score.bias.shape))
         self.nbbox_out = 4 * self.num_anchors
         self.RPN_bbox_pred = nn.Conv2d(output_depth, self.nbbox_out, 1, 1)
 

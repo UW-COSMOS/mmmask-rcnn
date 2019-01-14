@@ -17,6 +17,8 @@ class MMFasterRCNN(nn.Module):
         """
         super(MMFasterRCNN, self).__init__()
         self.img_size = kwargs["IMG_SIZE"]
+        self.scales = kwargs["SCALES"]
+        self.ratios = kwargs["RATIOS"]
         self.backbone = get_backbone(kwargs["BACKBONE"])
 
         # size should be informed at least partially by the receptive field
@@ -29,9 +31,7 @@ class MMFasterRCNN(nn.Module):
             kwargs["RPN"]["WINDOW_SIZE"]
         )
         #TODO calculate feature stride
-        feat_stride = 32
         self.proposal_layer = ProposalLayer(
-            feat_stride,
             kwargs["RATIOS"],
             kwargs["SCALES"],
             kwargs["IMG_SIZE"],

@@ -6,54 +6,58 @@ Author: Josh McGrath
 import numpy as np
 import torch
 from torch import nn
-from utils.generate_anchors import generate_anchors
 from model.nms.nms_wrapper import nms
+from itertools import product
 
 
-def clip_boxes(boxes, im_shape, batch_size):
+def generate_anchors(feat_stride, map_size, ratios, scales):
+    """
+    generate the actual image space anchor points without bbox_deltas applied
+    so they can be stored in memory
+    :param feat_stride: the number of relative pixel shifts in image space that
+     correspond to a single pixel shift in feature map space
+    :param map_size: the side length of the feature map
+    :param ratios: the ratios for each anchor
+    :param scales: the scales for each anchor
+    :return: [K x H x W x x4] K being the number of anchors
+    """
+    # first generate all center points [H x W x 2]
+    center_pts = np.ones((map_size, map_size, 2))
+    for i in range(map_size):
+        for j in range(map_size):
+            center = (feat_stride*i + feat_stride)/2.0, (feat_stride*j + feat_stride)/2.0
+            center_pts[i, j] = np.array(center)
+    # [Hx Wx K x4]
+    anchors = np.ones((map_size, map_size, len(ratios)*len(scales), 4))
+    for i in range(map_size):
+        for j in range(map_size):
+            x, y = center_pts[i, j]
+            for idx, (ratio, scale) in enumerate(product(ratios, scales)):
+                x1 = x - scale/2.0
+                x2 = x + scale/2.0
+                y1 = y - scale*ratio/2.0
+                y2 = y + scale*ratio/2.0
+                anchors[i, j, idx] = np.array((x1, y1, x2, y2))
+    # reshape to anchors first
+    return torch.from_numpy(anchors)
 
-    for i in range(batch_size):
-        boxes[i,:,0::4].clamp_(0, im_shape[1]-1)
-        boxes[i,:,1::4].clamp_(0, im_shape[0]-1)
-        boxes[i,:,2::4].clamp_(0, im_shape[1]-1)
-        boxes[i,:,3::4].clamp_(0, im_shape[0]-1)
+def filter_regions(regions, min_size):
+    """
+    remove regions which are too small
+    :param regions: [ Hx Wx K x4]
+    :param min_size: integer, minimum length of a side
+    :return: indexes of regions to be removed
+    """
+    # TODO implement, not currently implemented in matterport, or
+    # in pytorch faster rcnn, or the facebook implementation
+    return regions
 
-    return boxes
 
-def bbox_transform_inv(boxes, deltas, batch_size):
-    # TODO make this support batching
-    widths = boxes[:, :, 2] - boxes[:, :, 0] + 1.0
-    heights = boxes[:, :, 3] - boxes[:, :, 1] + 1.0
-    ctr_x = boxes[:, :, 0] + 0.5 * widths
-    ctr_y = boxes[:, :, 1] + 0.5 * heights
-
-    dx = deltas[:, :, 0::4]
-    dy = deltas[:, :, 1::4]
-    dw = deltas[:, :, 2::4]
-    dh = deltas[:, :, 3::4]
-
-    pred_ctr_x = dx * widths.unsqueeze(2) + ctr_x.unsqueeze(2)
-    pred_ctr_y = dy * heights.unsqueeze(2) + ctr_y.unsqueeze(2)
-    pred_w = torch.exp(dw) * widths.unsqueeze(2)
-    pred_h = torch.exp(dh) * heights.unsqueeze(2)
-
-    pred_boxes = deltas.clone()
-    # x1
-    pred_boxes[:, :, 0::4] = pred_ctr_x - 0.5 * pred_w
-    # y1
-    pred_boxes[:, :, 1::4] = pred_ctr_y - 0.5 * pred_h
-    # x2
-    pred_boxes[:, :, 2::4] = pred_ctr_x + 0.5 * pred_w
-    # y2
-    pred_boxes[:, :, 3::4] = pred_ctr_y + 0.5 * pred_h
-
-    return pred_boxes
 
 class ProposalLayer(nn.Module):
-    def __init__(self, feat_stride, ratios, scales, image_size=1920, NMS_PRE=3000, NMS_POST=300, min_size=64, threshold=0.6):
+    def __init__(self, ratios, scales, image_size=1920, NMS_PRE=3000, NMS_POST=300, min_size=64, threshold=0.6):
         super(ProposalLayer,self).__init__()
-        #TODO figure out how this is calculated
-        self.feat_stride = feat_stride
+        self.feat_stride = None
         self.ratios = ratios
         self.scales = scales
         self.image_size = image_size
@@ -61,106 +65,84 @@ class ProposalLayer(nn.Module):
         self.NMS_POST = NMS_POST
         self.threshold = threshold
         self.min_size = min_size
-        self.anchors = torch.from_numpy(generate_anchors(scales=np.array(scales),ratios=np.array(ratios))).float()
-        self.num_anchors = self.anchors.size(0)
+        self.anchors = None
 
-    def forward(self, cls_scores, bbox_preds):
+    def forward(self, cls_scores, bbox_deltas):
         """
         process proposals from the RPN
-        :param bbox_preds: [N x K x H x W x 4 ]
-        :param cls_scores: [N x K x H x W x 2 ] of scores not probabilities
+        :param bbox_deltas: [N x 4K x H x W ]
+        :param cls_scores: [N x 2K x H x W  ] of scores not probabilities
         :return:
         """
-        #TODO this doesn't yet support batching
-        batch_size = bbox_preds.size(0)
-        # drop bg probs
-        idx_keep = torch.arange(0,cls_scores.size(1),2)
-        cls_probs = cls_scores[:,idx_keep, :, :]
-        # get size of feature map
-        map_h, map_w = cls_scores.size(2), cls_scores.size(3)
-        # get shifts
-        shifts_x = torch.arange(0, map_w) * self.feat_stride
-        shifts_y = torch.arange(0, map_h) * self.feat_stride
-        shifts_x, shifts_y = torch.meshgrid(shifts_x, shifts_y)
-        shifts = torch.stack((shifts_x.flatten(), shifts_y.flatten(),
-                              shifts_x.flatten(), shifts_y.flatten())).transpose(0,1)
-        # Enumerate all shifted anchors:
-        #
-        # add A anchors (1, A, 4) to
-        # cell K shifts (K, 1, 4) to get
-        # shift anchors (K, A, 4)
-        # reshape to (K*A, 4) shifted anchors
-        A = self.num_anchors
-        K = shifts.size(0)
-        shifts = shifts.float()
-        anchors = self.anchors.reshape((1, A, 4)) + \
-                  shifts.reshape((1, K, 4)).transpose(1, 0)
-        anchors = anchors.reshape((1,K * A, 4))
 
-        # Transpose and reshape predicted bbox transformations to get them
-        # into the same order as the anchors:
-        #
-        # bbox deltas will be (1, 4 * A, H, W) format
-        # transpose to (1, H, W, 4 * A)
-        # reshape to (1 * H * W * A, 4) where rows are ordered by (h, w, a)
-        # in slowest to fastest order
-        # want to use bbox_preds.transpose(0, 2, 3, 1)
-        # but pytorch only supports formal transpositions
-        bbox_preds = bbox_preds.transpose(1, 2)
-        bbox_preds = bbox_preds.transpose(2, 3)
-        bbox_deltas = bbox_preds.reshape((1,-1, 4))
+        """
+        Algorithm
+        1) get all center points
+        2) make all anchors using center points
+        3) apply bbox_deltas
+        4) clip boxes to image
+        5) filter small boxes
+        6) pre NMS fitering by score
+        7) NMS filtering
+        8) post NMS filtering by score
+        """
+        # ensure center and original anchors have been precomputeds
+        if self.feat_stride is None:
+            self.feat_stride = round(self.image_size / float(cls_scores.size(3)))
+        if self.anchors is None:
+            self.anchors = generate_anchors(self.feat_stride,
+                                            cls_scores.size(3),
+                                            self.ratios,
+                                            self.scales)
 
-        # Same story for the scores:
-        #
-        # scores are (1, A, H, W) format
-        # transpose to (1, H, W, A)
-        # reshape to (1 * H * W * A, 1) where rows are ordered by (h, w, a)
-        cls_scores = cls_scores.transpose(1, 2)
-        cls_scores = cls_scores.transpose(2, 3)
-        scores = cls_scores.reshape((-1, 1))
+        H = cls_scores.size(2)
+        W = cls_scores.size(3)
+        # remove all negative class scores
+        batch_size = cls_scores.size(0)
+        # TODO support batching
+        cls_scores = cls_scores.squeeze()
+        cls_scores_pos = cls_scores.permute(1, 2, 0)
+        #get only even idxs
+        even_idxs = torch.arange(0, cls_scores_pos.size(2), 2)
+        cls_scores_pos = cls_scores_pos[:, :, even_idxs]
 
-        # Convert anchors into proposals via bbox transformations
-        print(anchors.shape)
-        proposals = bbox_transform_inv(anchors, bbox_deltas, batch_size)
-        # 2. clip predicted boxes to image
-        proposals = clip_boxes(proposals, (self.image_size, self.image_size), batch_size)
-
-        scores_keep = scores
-        proposals_keep = proposals
-        _, order = torch.sort(scores_keep, 1, True)
-
-        output = scores.new(batch_size, self.NMS_POST, 5).zero_()
-        for i in range(batch_size):
-            # # 3. remove predicted boxes with either height or width < threshold
-            # # (NOTE: convert min_size to input image scale stored in im_info[2])
-            proposals_single = proposals_keep[i]
-            scores_single = scores_keep[i]
-
-            # # 4. sort all (proposal, score) pairs by score from highest to lowest
-            # # 5. take top pre_nms_topN (e.g. 6000)
-            order_single = order[i]
-
-            if self.NMS_PRE > 0 and self.NMS_POST < scores_keep.numel():
-                order_single = order_single[:self.NMS_POST]
-
-            proposals_single = proposals_single[order_single, :]
-            scores_single = scores_single[order_single].view(-1, 1)
-
-            # 6. apply nms (e.g. threshold = 0.7)
-            # 7. take after_nms_topN (e.g. 300)
-            # 8. return the top proposals (-> RoIs top)
-
-            keep_idx_i = nms(torch.cat((proposals_single, scores_single), 1).detach(), self.threshold, force_cpu=True)
-            keep_idx_i = keep_idx_i.long().view(-1)
-
-            if self.NMS_POST > 0:
-                keep_idx_i = keep_idx_i[:self.NMS_POST]
-            proposals_single = proposals_single[keep_idx_i, :]
-
-            # padding 0 at the end.
-            num_proposal = proposals_single.size(0)
-            output[i, :, 0] = i
-            output[i, :num_proposal, 1:] = proposals_single
-
+        # apply bbox deltas but first reshape to (0,2,3,1) = (12)(23)
+        bbox_deltas = bbox_deltas.permute(0, 2, 3, 1)
+        # first squeeze out batch dimension
+        bbox_deltas = bbox_deltas.squeeze()
+        #reshape again to match anchors
+        bbox_deltas = bbox_deltas.reshape(bbox_deltas.shape[0], bbox_deltas.shape[1], -1, 4)
+        _anchors = self.anchors.float()
+        regions = _anchors + bbox_deltas
+        # now we clip the boxes to the image
+        regions = torch.clamp(regions, 0, self.image_size)
+        #TODO filter any boxes which are too small
+        # now we can grab the pre NMS regions
+        # first we reshape the tensors to be N x K, N x K x 4
+        cls_scores_pos = cls_scores_pos.permute(2, 0, 1).reshape(batch_size, -1)
+        regions = regions.view(batch_size, -1, 4, H, W).permute(0, 3, 4, 1, 2)
+        regions = regions.reshape(batch_size, -1, 4)
+        pre_nms = min(self.NMS_PRE, cls_scores_pos.size(1))
+        _, sort_order = cls_scores_pos.topk(pre_nms, dim=1)
+        cls_scores_pos = cls_scores_pos[0,sort_order].reshape(-1,1)
+        regions = regions[0,sort_order, :].squeeze()
+        keep_idx_i = nms(torch.cat((regions.detach(), cls_scores_pos.detach()), dim=1), self.threshold)
+        print(f" keep_idx shape:{keep_idx_i.shape}")
+        keep_idx_i = keep_idx_i.long().view(-1)
+        keep_idx_i = keep_idx_i[:self.NMS_POST]
+        proposals = regions[keep_idx_i, :]
+        cls_scores_pos = cls_scores_pos[keep_idx_i, :]
+        print(f"final proposal shape{proposals.shape}")
+        output = cls_scores.new(batch_size, self.NMS_POST, 5)
+        #TODO change after batching
+        num_proposals = proposals.size(0)
+        output[0, :, 0] = cls_scores_pos.squeeze()
+        output[0, :num_proposals, 1:] = proposals
         return output
+
+
+
+
+
+
 

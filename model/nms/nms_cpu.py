@@ -27,7 +27,6 @@ def nms_cpu(dets, thresh):
         h = np.maximum(0.0, yy2 - yy1 + 1)
         inter = w * h
         ovr = inter / (areas[i] + areas[order[1:]] - inter)
-
         inds = np.where(ovr <= thresh)[0]
         order = order[inds + 1]
 
