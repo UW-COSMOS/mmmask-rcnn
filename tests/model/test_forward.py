@@ -2,7 +2,7 @@ from model.model import MMFasterRCNN
 import torch
 import yaml
 
-with open("config.yaml") as fh:
+with open("model_config.yaml") as fh:
     document = fh.read()
     args = yaml.load(document)
     print(document)
