@@ -44,7 +44,7 @@ def test_convert_image_to_binary_map():
         raise Exception('Test 2 test_convert_image_to_binary_map failed')
 
 
-# TODO: Clean this up. Some redundancy here
+# TODO: Can clean this up. Some redundancy here
 def get_components(bmap):
     label_map = np.zeros(bmap.shape)
     current_label = 1
@@ -184,7 +184,7 @@ def test_get_components():
             print(expected)
             print('-----')
             print(result)
-            raise Exception('test 2 test_get_components failed')
+            raise Exception('test 3 test_get_components failed')
 
     test3 = torch.tensor((), dtype=torch.uint8).new_ones(20, 20)
     test3[2, :] = 0
@@ -196,13 +196,13 @@ def test_get_components():
             print(expected)
             print('-----')
             print(result)
-            raise Exception('test 3 test_get_components failed')
+            raise Exception('test 4 test_get_components failed')
     for element in result:
         if element not in expected:
             print(expected)
             print('-----')
             print(result)
-            raise Exception('test 3 test_get_components failed')
+            raise Exception('test 5 test_get_components failed')
 
 
 def get_proposals(img):
