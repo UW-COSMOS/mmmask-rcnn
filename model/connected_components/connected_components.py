@@ -5,16 +5,19 @@ Connected components algorithm for region proposal
 import torch
 from PIL import Image
 import numpy as np
+from skimage import io
+from torchvision.transforms import ToTensor
+from timeit import default_timer as timer
 
 
 def convert_image_to_binary_map(img):
     """
-    :param img: [3 x SIZE x SIZE] tensor
+    :param img: [3 x H x W ] tensor
     :return: 
     """
     if img.type() != torch.float:
         img = img.float()
-    white_tensor = torch.tensor([255, 255, 255], dtype=torch.float)
+    white_tensor = torch.tensor([1.0, 1.0, 1.0], dtype=torch.float)
     binary_map = torch.tensor((), dtype=torch.uint8).new_ones(img.shape[1], img.shape[2])
     for x in range(img.shape[1]):
         for y in range(img.shape[2]):
@@ -25,8 +28,8 @@ def convert_image_to_binary_map(img):
 
 
 def test_convert_image_to_binary_map():
-    img_rand = np.random.randint(0, high=255, size=(3, 20, 20))
-    img_rand[:, :5, :5] = 255
+    img_rand = np.random.rand(3, 20, 20)
+    img_rand[:, :5, :5] = 1.0
     img_data = torch.from_numpy(img_rand)
     expected = torch.tensor((), dtype=torch.uint8).new_ones(20, 20)
     expected[:5, :5] = 0
@@ -34,8 +37,8 @@ def test_convert_image_to_binary_map():
     if not result.eq(expected).all():
         raise Exception('Test 1 test_convert_image_to_binary_map failed')
 
-    img_rand = np.random.randint(0, high=255, size=(3, 20, 20))
-    img_rand[:, 8, 8] = 255
+    img_rand = np.random.rand(3, 20, 20)
+    img_rand[:, 8, 8] = 1.0
     img_data = torch.from_numpy(img_rand)
     expected = torch.tensor((), dtype=torch.uint8).new_ones(20, 20)
     expected[8, 8] = 0
@@ -205,24 +208,126 @@ def test_get_components():
             raise Exception('test 5 test_get_components failed')
 
 
-def get_proposals(img):
+# THIS IS UNFINISHED AND UNTESTED, DO NOT USE
+def grid_proposal(img, recurse_depth=4):
+    """
+    Rough proposals based off a grid algorithm
+    :param img: [SIZE x SIZE] binary tensor map
+    :return: list of proposals [coords]
+    """
+    # Pass 1: large object row division
+    zero_row = torch.tensor((), dtype=uint8).new_zeros(1, img.shape[1])
+    heights_map = {}
+    start_flag = False
+    start_y = 0
+    end_y = 0
+    ind = 0
+    for row in img:
+        if row.eq(zero_row).all():
+            if start_flag:
+                continue
+            start_flag = True
+            start_y = ind
+        else:
+            if not start_flag:
+                continue
+            end_y = ind - 1
+            height = end_y - start_y
+            if height in heights_map:
+                heights_map[height].append((start_y, end_y))
+            else:
+                heights_map[height] = [(start_y, end_y)]
+        ind += 1
+    heights = list(heights_map.keys())
+    heights.sort()
+    oset = dict.fromkeys(heights)
+    oset_keys = list(oset.keys())
+    split_heights = oset_keys[:3]
+    all_spl_coords = []
+    for spl_h in split_heights:
+        spl_coords = heights_map[spl_h]
+        for coord in spl_coords:
+            all_spl_coords.append(coord)
+    # sort by start y
+    all_spl_coords.sort(key=lambda x: x[0])
+    # crops are the end of the last object and the beginning of the next object
+    row_crop_imgs = []
+    for i in range(len(all_spl_coords)-1):
+        t, b = all_spl_coords[i][1], all_spl_coords[i+1][0]
+        crop = img[t:b, :]
+        row_crop_imgs.append()
+
+
+def get_proposals(img, min_area=1000):
     """
     Get the proposals from the img tensors
-    :param img: [N x 3 x SIZE x SIZE] tensor
+    :param img: [N x 3 x HEIGHT x WIDTH] tensor
     :return: [N x M x 4], where M is the index of the connected component proposal
     """
+    cc_list = []
     for i in img:
         bmap = convert_image_to_binary_map(i)
+        components = get_components(bmap)
+        components_set = set()
+        for ind, component in enumerate(components):
+            for next_component in components[ind+1:]:
+                tl_x1, tl_y1, br_x1, br_y1 = component
+                tl_x2, tl_y2, br_x2, br_y2 = next_component
+                # Lets pretend the max/min functions don't exist, shhhhhhh
+                tl_x = tl_x1 if tl_x1 < tl_x2 else tl_x2
+                tl_y = tl_y1 if tl_y1 < tl_y2 else tl_y2
+                br_x = br_x1 if br_x1 > br_x2 else br_x2
+                br_y = br_y1 if br_y1 > br_y2 else br_y2
+                area = (br_x - tl_x) * (br_y - tl_y)
+                if area > min_area:
+                    components_set.add((tl_x, tl_y, br_x, br_y))
+        components_list = list(components_set)
+        components_list = [list(x) for x in components_list]
+        cc_list.append(components_list)
+    np_cc = np.array(cc_list, dtype='int32')
+    return torch.from_numpy(np_cc)
+
+
+def test_get_proposals():
+    img_rand = np.random.rand(1,3,20,20)
+    img_rand[0,:,  2, :] = 1.0
+    img_rand[0,:,  :, 10] = 1.0
+    inp_rand = torch.from_numpy(img_rand)
+    np_expected = [[[0, 0, 19, 9], [0, 0, 1, 19], [0, 0, 19, 19], [3, 0, 19, 19], [0, 11, 19, 19]]]
+    np_expected = np.array(np_expected, dtype='int32')
+    expected = torch.from_numpy(np_expected)
+    expected, _ = torch.sort(expected)
+    proposals = get_proposals(inp_rand, min_area=0)
+    proposals, _ = torch.sort(proposals)
+    if proposals.shape != expected.shape:
+        print(proposals.shape)
+        print('----')
+        print(expected.shape)
+        raise Exception('Test 1 test_get_proposals failed')
+    p = proposals[0, :, :].numpy()
+    e = expected[0, :, :].numpy()
+    for pp in p:
+        if pp not in e:
+            raise Exception('Test 2 test_get_proposals failed')
+    for ee in e:
+        if ee not in p:
+            raise Exception('Test 3 test_get_proposals failed')
 
 
 if __name__ == '__main__':
     test_convert_image_to_binary_map()
     test_get_components()
-    img_rand = np.random.randint(0, high=255, size=(2,3,20,20))
-    img_rand[0, :, 1, 1] = 255
-    img_rand[0, :, 5, 5] = 255
-    img_rand[1, :, 8, 8] = 255
-    img_data = torch.from_numpy(img_rand)
-    get_proposals(img_data)
+    test_get_proposals()
+    img = Image.open('1812.10437.pdf-0001.png')
+    ts = ToTensor()
+    tens = ts(img)
+    tens = tens[:3, :, :]
+    us = tens.unsqueeze(0)
+    start = timer()
+    proposals = get_proposals(us)
+    end = timer()
+    print(f'Proposals timer: {end - start}')
+    print(f'Number of proposals: {proposals.shape[1]}')
+
 
 
