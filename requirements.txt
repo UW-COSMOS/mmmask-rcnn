@@ -1,5 +1,5 @@
 torch
 torchvision
-numpy
+numpy==1.15.4
 pyyaml
-skimage
+scikit-image
