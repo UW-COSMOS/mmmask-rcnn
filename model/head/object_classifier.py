@@ -35,13 +35,14 @@ class MultiModalClassifier(nn.Module):
         """
         print(self.height,self.width,self.depth)
         x = roi_maps.view(-1, self.depth * self.width * self.height)
-        #TODO support batching
+        # TODO support batching
         x = self.FC(x)
         x = relu(x)
         x = self.FC_2(x)
         x = relu(x)
         cls_scores = self.cls_branch(x)
         bbox_scores = self.bbox_branch(x)
-        return softmax(cls_scores), cls_scores, bbox_scores
+        # TODO ensure this is the correct dimension
+        return softmax(cls_scores, dim=1), cls_scores, bbox_scores
 
 

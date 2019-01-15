@@ -50,6 +50,7 @@ def load_image(base_path, identifier, img_type):
     img_data = torch.from_numpy(img_data)
     return img_data
 
+
 def load_gt(xml_dir, identifier):
     """
     Load an XML ground truth document
@@ -63,8 +64,6 @@ def load_gt(xml_dir, identifier):
     # convert to tensors
     gt_boxes = torch.tensor(tensor_list)
     return gt_boxes, cls_list
-
-
 
 class XMLLoader:
     """
@@ -83,8 +82,9 @@ class XMLLoader:
         self.img_dir = img_dir
         self.img_type = img_type
         self.imgs = os.listdir(img_dir)
-        self.identifiers = [splitext(img) for img in self.imgs]
-        self.num_images = len(self.annotations)
+        self.identifiers = [splitext(img)[0] for img in self.imgs]
+        self.num_images = len(self.imgs)
+        print(f"Constructed a {self.num_images} image dataset")
 
     def size(self):
         return self.num_images
@@ -94,8 +94,3 @@ class XMLLoader:
         img = load_image(self.img_dir, identifier, self.img_type)
         gt = load_gt(self.xml_dir, identifier)
         return img, gt
-
-
-
-
-
