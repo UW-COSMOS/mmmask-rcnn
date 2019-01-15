@@ -28,7 +28,7 @@ class RPN(nn.Module):
                                   bias=bias)
         #class branch weights
         # 2*num_anchors out
-        self.ncls_out = 2 * self.num_anchors
+        self.ncls_out = self.num_anchors
         self.RPN_cls_score = nn.Conv2d(output_depth, self.ncls_out, 1, 1)
         self.RPN_cls_score.bias = torch.nn.Parameter(torch.ones(self.RPN_cls_score.bias.shape))
         self.nbbox_out = 4 * self.num_anchors
@@ -47,6 +47,6 @@ class RPN(nn.Module):
         TODO make this something easy to iterate over in a left-right top-bottom
         fashion
         """
-        cls_branch_preds = F.softmax(cls_branch_scores, dim=2)
-        bbox_branch_preds  = self.RPN_bbox_pred(x)
+        cls_branch_preds = torch.sigmoid(cls_branch_scores)
+        bbox_branch_preds = self.RPN_bbox_pred(x)
         return cls_branch_preds,cls_branch_scores, bbox_branch_preds

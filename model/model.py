@@ -30,7 +30,6 @@ class MMFasterRCNN(nn.Module):
             kwargs["SCALES"],
             kwargs["RPN"]["WINDOW_SIZE"]
         )
-        #TODO calculate feature stride
         self.proposal_layer = ProposalLayer(
             kwargs["RATIOS"],
             kwargs["SCALES"],
@@ -64,16 +63,11 @@ class MMFasterRCNN(nn.Module):
         :return: [(cls_index,[x1, y1, x2, y2])] for each non bg-class
         """
         feature_map = self.backbone.forward(img)
-        print(f"feature map: {feature_map.shape}")
         rpn_cls_branch_preds, rpn_cls_branch_scores, rpn_bbox_branch =\
             self.RPN(feature_map)
-        print(f"rpn_cls_banch: {rpn_cls_branch_preds.shape}")
-        print(f"bbox branch:{rpn_bbox_branch.shape}")
         rois = self.proposal_layer(rpn_cls_branch_preds, rpn_bbox_branch)
-        print(f"rois : {rois.shape}")
-        #TODO this will break batching without a reshape
+        # TODO this will break batching without a reshape
         maps = self.ROI_pooling(feature_map, rois)
-        print(f"maps: {maps.shape}")
         cls_preds, cls_scores, bbox_deltas = self.classification_head(maps)
         return rpn_cls_branch_scores, rpn_bbox_branch,cls_preds, cls_scores, bbox_deltas
 

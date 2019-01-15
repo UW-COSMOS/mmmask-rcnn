@@ -3,6 +3,7 @@ Training helper class
 Takes a model, dataset, and training paramters
 as arguments
 """
+import torch
 from torch import optim
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -15,7 +16,11 @@ def collate(batch):
     :param batch:
     :return:
     """
-    pass
+    exs = [item[0] for item in batch]
+    gts = [item[1] for item in batch]
+    return torch.stack(exs).float(), gts
+
+
 class TrainerHelper:
     def __init__(self, model, dataset, params):
         """
@@ -27,22 +32,29 @@ class TrainerHelper:
         self.model = model
         self.dataset = dataset
         self.params = params
-        self.anchor_target_layer = AnchorTargetLayer(model.feat_stride, model.scales, model.ratios, params)
+        self.anchor_target_layer = AnchorTargetLayer(model.scales, model.ratios,500)
 
 
     def train(self):
-        optimizer = optim.Adam(lr=self.params["LEARNING_RATE"])
+        print("----------")
+        print("beginning training")
+        optimizer = optim.Adam(self.model.parameters(), lr=self.params["LEARNING_RATE"])
         loader = DataLoader(self.dataset,
                             batch_size=self.params["BATCH_SIZE"],
                             collate_fn=collate)
         for epoch in tqdm(range(self.params["EPOCHS"])):
             for batch in loader:
+                #not currently supporting batching
                 ex, gt = batch
-                gt_cls, gt_boxes = gt
+                gt_boxes,gt_cls = gt[0]
+                #fix for batching
+                gt_boxes = gt_boxes.reshape(1, -1,4).float()
                 # forward pass
-                rpn_cls_branch_scores, rpn_bbox_branch, cls_preds, cls_scores, bbox_deltas = self.model(batch)
+                rpn_cls_scores, rpn_bbox_deltas, cls_preds, cls_scores, bbox_deltas = self.model(ex)
+                print("forward pass complete")
                 # calculate losses
-                target_attributions = self.anchor_target_layer(rpn_cls_branch_scores,gt_boxes)
+                rpn_cls_loss, rpn_bbox_loss = self.anchor_target_layer(rpn_cls_scores, rpn_bbox_deltas,gt_boxes)
+                print(f"rpn_cls_loss: {rpn_bbox_loss.shape}, rpn_bbox_loss: {rpn_bbox_loss.shape}")
 
 
 
