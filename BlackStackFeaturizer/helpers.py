@@ -609,5 +609,5 @@ def group_areas(areas):
         if not found:
             grouped_areas.append(area)
 
-return grouped_areas
+    return grouped_areas
 
