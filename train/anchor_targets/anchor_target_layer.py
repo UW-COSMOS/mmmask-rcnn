@@ -15,7 +15,7 @@ NEGATIVE = -2
 
 
 
-def match(regions, gt_boxes, upper, lower):
+def match(regions, gt_boxes, upper, lower, device):
     """
     Get positive region indexes for each box
     :param regions: predicted regions [KA x 4]
@@ -32,7 +32,7 @@ def match(regions, gt_boxes, upper, lower):
     # now get best prediction for each
     best_score_pred, match_idxs_pred = torch.max(overlaps, dim=1)
     # mask for the boxes with
-    ret = NEITHER*torch.ones(regions.size(0))
+    ret = NEITHER*torch.ones(regions.size(0)).to(device)
     mask = best_score_pred >= upper
     # check for empty tensor
     if match_idxs_pred[mask].size(0) > 0:
@@ -114,7 +114,7 @@ class AnchorTargetLayer(nn.Module):
         regions = regions.view(batch_size, -1, 4, H, W).permute(0, 3, 4, 1, 2)
         # reshaped to [batch x L x 4]
         regions = regions.reshape(batch_size, -1, 4)
-        matches = match(regions.squeeze(0), gt_boxes[:, :4].squeeze(0), self.upper, self.lower)
+        matches = match(regions.squeeze(0), gt_boxes[:, :4].squeeze(0), self.upper, self.lower, device)
         # filter out neither targets
         pos_mask = matches >= 0
         pos_inds = pos_mask.nonzero()

@@ -118,6 +118,6 @@ class HeadTargetLayer(nn.Module):
         gt_bbox = gt_boxes[gt_indxs, :]
         gt_bbox = gt_bbox.reshape(-1, 1, 4)
         # no normalization happens at the head
-        norm = torch.ones(1)
+        norm = torch.ones(1).to(device)
         bbox_loss = self.bbox_loss(sample_pred_bbox, gt_bbox, norm)
         return cls_loss, bbox_loss

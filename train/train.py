@@ -51,13 +51,12 @@ class TrainerHelper:
 
 
     def train(self):
-        optimizer = optim.Adam(self.model.parameters(), lr=self.params["LEARNING_RATE"])
+        optimizer = optim.SGD(self.model.parameters(), lr=self.params["LEARNING_RATE"])
         loader = DataLoader(self.dataset,
                             batch_size=self.params["BATCH_SIZE"],
                             collate_fn=partial(collate,cls_dict=self.cls))
         for epoch in tqdm(range(self.params["EPOCHS"])):
             for batch in loader:
-                optimizer.zero_grad()
                 # not currently supporting batching
                 optimizer.zero_grad()
                 ex, gt_box, gt_cls = batch
@@ -73,17 +72,17 @@ class TrainerHelper:
                 rpn_cls_loss, rpn_bbox_loss = self.anchor_target_layer(rpn_cls_scores, rpn_bbox_deltas,gt_box, self.device)
                 # add gt classes to boxes
                 cls_loss, bbox_loss = self.head_target_layer(rois, cls_scores, bbox_deltas, gt_box, gt_cls, self.device)
-                print(f"rpn_cls_loss: {rpn_bbox_loss}, rpn_bbox_loss: {rpn_bbox_loss}")
+                print(f"rpn_cls_loss: {rpn_cls_loss}, rpn_bbox_loss: {rpn_bbox_loss}")
                 print(f"head_cls_loss: {cls_loss}, bbox_loss: {bbox_loss}")
                 loss = rpn_cls_loss + rpn_bbox_loss + cls_loss + bbox_loss
-                for obj in gc.get_objects():
-                    try:
-                        if torch.is_tensor(obj) or (hasattr(obj, 'data') and torch.is_tensor(obj.data)):
-                            print(type(obj), obj.size())
-                    except Exception:
-                        pass
                	loss.backward() 
-								# print out memory usage
+                print(torch.cuda.memory_allocated(self.device))
+                # for obj in gc.get_objects():
+#                     try:
+                        # if torch.is_tensor(obj) or (hasattr(obj, 'data') and torch.is_tensor(obj.data)):
+                            # print(type(obj), obj.size(), obj.requires_grad)
+                    # except Exception:
+                        # pass
 
                 optimizer.step()
 
