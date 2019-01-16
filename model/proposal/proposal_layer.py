@@ -107,6 +107,9 @@ class ProposalLayer(nn.Module):
         output[0, :num_proposals, 1:] = proposals
         return output
 
+    def backward(self, ctx, grad_output):
+        pass
+
 
 
 

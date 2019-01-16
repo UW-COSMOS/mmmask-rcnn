@@ -60,7 +60,7 @@ class AnchorTargetLayer(nn.Module):
         self.bg_ratio = bg_ratio
         self.anchors = None
 
-        self.cls_loss = BCEWithLogitsLoss()
+        self.cls_loss = BCEWithLogitsLoss(reduction="mean")
 
         self.bbox_loss = SmoothL1Loss(10)
 
@@ -133,7 +133,8 @@ class AnchorTargetLayer(nn.Module):
         # reshape for pre batching
         cls_scores = cls_scores.squeeze()
         pred_cls = torch.cat((cls_scores[pos_inds], cls_scores[sample_neg_inds]))
-        cls_loss = self.cls_loss(pred_cls, gt_cls)
+        cls_loss = self.cls_loss(pred_cls, gt_cls.float())
+
         # we only do bbox regression on positive targets
         # get and reshape matches
         gt_indxs = matches[pos_inds].long()
@@ -141,9 +142,8 @@ class AnchorTargetLayer(nn.Module):
         # TODO fix when implementing batches
         regions = regions.squeeze(0)
         sample_pred_bbox = regions[pos_inds, :]
-        print(f"rpn_bbox_shape: {sample_pred_bbox.shape}")
-        print(f"rpn_gt_bbox_shape: {sample_gt_bbox.shape}")
-        bbox_loss = self.bbox_loss(sample_pred_bbox, sample_gt_bbox)
+        norm = torch.tensor(self.anchors.size(0)).float()
+        bbox_loss = self.bbox_loss(sample_pred_bbox, sample_gt_bbox, norm)
         return cls_loss, bbox_loss
 
 
