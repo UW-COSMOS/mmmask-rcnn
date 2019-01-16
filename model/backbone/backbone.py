@@ -86,6 +86,9 @@ def get_resnet(nlayers=50):
     backbone = nn.Sequential(base.conv1, base.bn1, base.relu,
             base.maxpool, base.layer1, base.layer2,
             base.layer3, base.layer4)
+		#dont keep parameters gradients for ConvNet
+    for param in backbone.parameters():
+			  param.requires_grad = False
     backbone.output_depth = 2048
     return backbone
 
