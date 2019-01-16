@@ -7,18 +7,26 @@ import torch
 from torch import optim
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-from train.losses.smooth_l1_loss import SmoothL1Loss
 from train.anchor_targets.anchor_target_layer import AnchorTargetLayer
+from train.anchor_targets.head_target_layer import HeadTargetLayer
+from functools import partial
 
-def collate(batch):
+
+def unpack_cls(cls_dict, gt_list):
+    arr = map(lambda x: cls_dict[x], gt_list)
+    return torch.tensor(list(arr))
+
+
+def collate(batch, cls_dict):
     """
-
+    collation function for GTDataset class
     :param batch:
     :return:
     """
     exs = [item[0] for item in batch]
-    gts = [item[1] for item in batch]
-    return torch.stack(exs).float(), gts
+    gt_box = [item[1][0] for item in batch]
+    gt_cls = [unpack_cls(cls_dict, item[1][1]) for item in batch]
+    return torch.stack(exs).float(), gt_box, gt_cls
 
 
 class TrainerHelper:
@@ -32,29 +40,36 @@ class TrainerHelper:
         self.model = model
         self.dataset = dataset
         self.params = params
-        self.anchor_target_layer = AnchorTargetLayer(model.scales, model.ratios,500)
+        self.cls = dict([(val, idx) for (idx, val) in enumerate(model.cls_names)])
+        self.anchor_target_layer = AnchorTargetLayer(model.scales, model.ratios,model.img_size)
+        self.head_target_layer = HeadTargetLayer(model.scales,
+                                                 model.ratios,
+                                                 model.img_size,
+                                                 ncls=len(model.cls_names))
 
 
     def train(self):
-        print("----------")
-        print("beginning training")
         optimizer = optim.Adam(self.model.parameters(), lr=self.params["LEARNING_RATE"])
         loader = DataLoader(self.dataset,
                             batch_size=self.params["BATCH_SIZE"],
-                            collate_fn=collate)
+                            collate_fn=partial(collate,cls_dict=self.cls))
         for epoch in tqdm(range(self.params["EPOCHS"])):
             for batch in loader:
-                #not currently supporting batching
-                ex, gt = batch
-                gt_boxes,gt_cls = gt[0]
-                #fix for batching
-                gt_boxes = gt_boxes.reshape(1, -1,4).float()
+                # not currently supporting batching
+                ex, gt_box, gt_cls = batch
+                # fix for batching
+                gt_box = gt_box[0]
+                gt_cls = gt_cls[0]
+                gt_box = gt_box.reshape(1, -1,4).float()
                 # forward pass
-                rpn_cls_scores, rpn_bbox_deltas, cls_preds, cls_scores, bbox_deltas = self.model(ex)
+                rpn_cls_scores, rpn_bbox_deltas, rois, cls_preds, cls_scores, bbox_deltas = self.model(ex)
                 print("forward pass complete")
                 # calculate losses
-                rpn_cls_loss, rpn_bbox_loss = self.anchor_target_layer(rpn_cls_scores, rpn_bbox_deltas,gt_boxes)
+                rpn_cls_loss, rpn_bbox_loss = self.anchor_target_layer(rpn_cls_scores, rpn_bbox_deltas,gt_box)
+                # add gt classes to boxes
+                cls_loss, bbox_loss = self.head_target_layer(rois, cls_scores, bbox_deltas, gt_box, gt_cls)
                 print(f"rpn_cls_loss: {rpn_bbox_loss.shape}, rpn_bbox_loss: {rpn_bbox_loss.shape}")
+                print(f"head_cls_loss: {cls_loss.shape}, bbox_loss: {bbox_loss.shape}")
 
 
 

@@ -59,7 +59,9 @@ class AnchorTargetLayer(nn.Module):
         self.lower = lower
         self.bg_ratio = bg_ratio
         self.anchors = None
+
         self.cls_loss = BCEWithLogitsLoss()
+
         self.bbox_loss = SmoothL1Loss(10)
 
     def forward(self, cls_scores, bbox_deltas, gt_boxes):
@@ -67,7 +69,7 @@ class AnchorTargetLayer(nn.Module):
         process proposals from the RPN
         :param bbox_deltas: [N x 4K x H x W ]
         :param cls_scores: [N x 2K x H x W  ] of scores not probabilities
-        :param gt_boxes: [M x 5] [x1, y1, x2, y2]
+        :param gt_boxes: [M x 4] [x1, y1, x2, y2]
         :return:
         """
 
@@ -93,17 +95,16 @@ class AnchorTargetLayer(nn.Module):
 
         H = cls_scores.size(2)
         W = cls_scores.size(3)
-        # remove all negative class scores
         batch_size = cls_scores.size(0)
         # TODO support batching
         cls_scores = cls_scores.squeeze()
         cls_scores = cls_scores.permute(1, 2, 0)
 
-        # apply bbox deltas but first reshape to (0,2,3,1) = (12)(23)
+        # apply bbox deltas but first reshape to (batch,H,W,4K)
         bbox_deltas = bbox_deltas.permute(0, 2, 3, 1)
-        # first squeeze out batch dimension
+        # squeeze out batch dimension
         bbox_deltas = bbox_deltas.squeeze()
-        # reshape again to match anchors
+        # reshape again to match anchors (H,W,Kx4)
         bbox_deltas = bbox_deltas.reshape(bbox_deltas.shape[0], bbox_deltas.shape[1], -1, 4)
         _anchors = self.anchors.float()
         regions = _anchors + bbox_deltas
@@ -111,6 +112,7 @@ class AnchorTargetLayer(nn.Module):
         regions = torch.clamp(regions, 0, self.image_size)
         # now we can start matching
         regions = regions.view(batch_size, -1, 4, H, W).permute(0, 3, 4, 1, 2)
+        # reshaped to [batch x L x 4]
         regions = regions.reshape(batch_size, -1, 4)
         matches = match(regions.squeeze(0), gt_boxes[:, :4].squeeze(0), self.upper, self.lower)
         # filter out neither targets
@@ -123,8 +125,6 @@ class AnchorTargetLayer(nn.Module):
         bg_num = torch.round(torch.tensor(pos_inds.size(0)*self.bg_ratio)).long()
         perm = torch.randperm(neg_inds.size(0))
         sample_neg_inds = perm[:bg_num]
-        # sample_neg_pts = matches[sample_neg_inds]
-        # pos_pts = matches[pos_inds]
         gt_cls = torch.cat((torch.ones(pos_inds.size(0)), torch.zeros(sample_neg_inds.size(0))))
         # grab cls_scores from each point
         # first we need to reshape the cls_scores to match
@@ -138,10 +138,11 @@ class AnchorTargetLayer(nn.Module):
         # get and reshape matches
         gt_indxs = matches[pos_inds].long()
         sample_gt_bbox = gt_boxes[gt_indxs, :]
-        print(f"regions shape {regions.shape}")
         # TODO fix when implementing batches
         regions = regions.squeeze(0)
         sample_pred_bbox = regions[pos_inds, :]
+        print(f"rpn_bbox_shape: {sample_pred_bbox.shape}")
+        print(f"rpn_gt_bbox_shape: {sample_gt_bbox.shape}")
         bbox_loss = self.bbox_loss(sample_pred_bbox, sample_gt_bbox)
         return cls_loss, bbox_loss
 

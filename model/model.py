@@ -66,10 +66,11 @@ class MMFasterRCNN(nn.Module):
         rpn_cls_branch_preds, rpn_cls_branch_scores, rpn_bbox_branch =\
             self.RPN(feature_map)
         rois = self.proposal_layer(rpn_cls_branch_preds, rpn_bbox_branch)
-        # TODO this will break batching without a reshape
+        # TODO needs to be fixed for batching
+        rois = rois.squeeze()
         maps = self.ROI_pooling(feature_map, rois)
         cls_preds, cls_scores, bbox_deltas = self.classification_head(maps)
-        return rpn_cls_branch_scores, rpn_bbox_branch,cls_preds, cls_scores, bbox_deltas
+        return rpn_cls_branch_scores, rpn_bbox_branch, rois, cls_preds, cls_scores, bbox_deltas
 
 
 

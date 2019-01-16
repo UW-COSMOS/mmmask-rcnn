@@ -23,8 +23,9 @@ class MultiModalClassifier(nn.Module):
         self.depth = pool_depth
         self.FC = nn.Linear(self.height*self.width*self.depth, intermediate)
         self.FC_2 = nn.Linear(intermediate, intermediate)
-        self.cls_branch = nn.Linear(intermediate, ncls)
-        self.bbox_branch = nn.Linear(intermediate, 4*ncls)
+        # background class
+        self.cls_branch = nn.Linear(intermediate, ncls+1)
+        self.bbox_branch = nn.Linear(intermediate, 4*(ncls+1))
 
 
     def forward(self, roi_maps):
@@ -33,7 +34,6 @@ class MultiModalClassifier(nn.Module):
         :param roi_maps: [NxHxWxD]
         :return:
         """
-        print(self.height,self.width,self.depth)
         x = roi_maps.view(-1, self.depth * self.width * self.height)
         # TODO support batching
         x = self.FC(x)
