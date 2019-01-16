@@ -6,8 +6,13 @@ import torch
 from PIL import Image
 import numpy as np
 from skimage import io
-from torchvision.transforms import ToTensor
+from torchvision.transforms import ToTensor, ToPILImage
 from timeit import default_timer as timer
+import math
+import numbers
+from torch import nn
+from torch.nn import functional as F
+
 
 
 def convert_image_to_binary_map(img):
@@ -22,7 +27,7 @@ def convert_image_to_binary_map(img):
     for x in range(img.shape[1]):
         for y in range(img.shape[2]):
             z = img[:, x, y]
-            if z.eq(white_tensor).all():
+            if ((z-white_tensor).abs() < 0.0001).all():
                 binary_map[x, y] = 0
     return binary_map
 
@@ -46,6 +51,71 @@ def test_convert_image_to_binary_map():
     if not result.eq(expected).all():
         raise Exception('Test 2 test_convert_image_to_binary_map failed')
 
+# https://discuss.pytorch.org/t/is-there-anyway-to-do-gaussian-filtering-for-an-image-2d-3d-in-pytorch/12351/8
+class GaussianSmoothing(nn.Module):
+    """
+    Apply gaussian smoothing on a
+    1d, 2d or 3d tensor. Filtering is performed seperately for each channel
+    in the input using a depthwise convolution.
+    Arguments:
+        channels (int, sequence): Number of channels of the input tensors. Output will
+            have this number of channels as well.
+        kernel_size (int, sequence): Size of the gaussian kernel.
+        sigma (float, sequence): Standard deviation of the gaussian kernel.
+        dim (int, optional): The number of dimensions of the data.
+            Default value is 2 (spatial).
+    """
+    def __init__(self, channels, kernel_size, sigma, dim=2):
+        super(GaussianSmoothing, self).__init__()
+        if isinstance(kernel_size, numbers.Number):
+            kernel_size = [kernel_size] * dim
+        if isinstance(sigma, numbers.Number):
+            sigma = [sigma] * dim
+
+        # The gaussian kernel is the product of the
+        # gaussian function of each dimension.
+        kernel = 1
+        meshgrids = torch.meshgrid(
+            [
+                torch.arange(size, dtype=torch.float32)
+                for size in kernel_size
+            ]
+        )
+        for size, std, mgrid in zip(kernel_size, sigma, meshgrids):
+            mean = (size - 1) / 2
+            kernel *= 1 / (std * math.sqrt(2 * math.pi)) * \
+                      torch.exp(-((mgrid - mean) / (2 * std)) ** 2)
+
+        # Make sure sum of values in gaussian kernel equals 1.
+        kernel = kernel / torch.sum(kernel)
+
+        # Reshape to depthwise convolutional weight
+        kernel = kernel.view(1, 1, *kernel.size())
+        kernel = kernel.repeat(channels, *[1] * (kernel.dim() - 1))
+
+        self.register_buffer('weight', kernel)
+        self.groups = channels
+
+        if dim == 1:
+            self.conv = F.conv1d
+        elif dim == 2:
+            self.conv = F.conv2d
+        elif dim == 3:
+            self.conv = F.conv3d
+        else:
+            raise RuntimeError(
+                'Only 1, 2 and 3 dimensions are supported. Received {}.'.format(dim)
+            )
+
+    def forward(self, input):
+        """
+        Apply gaussian filter to input.
+        Arguments:
+            input (torch.Tensor): Input to apply gaussian filter on.
+        Returns:
+            filtered (torch.Tensor): Filtered output.
+        """
+        return self.conv(input, weight=self.weight, groups=self.groups)
 
 # TODO: Can clean this up. Some redundancy here
 def get_components(bmap):
@@ -258,12 +328,21 @@ def grid_proposal(img, recurse_depth=4):
         row_crop_imgs.append()
 
 
-def get_proposals(img, min_area=1000):
+def get_proposals(img, min_area=0, use_blur=True, output_blur=False):
     """
     Get the proposals from the img tensors
     :param img: [N x 3 x HEIGHT x WIDTH] tensor
+    :param min_area: minimum area of a connected component to consider
     :return: [N x M x 4], where M is the index of the connected component proposal
     """
+    # First we blur to get better connected components
+    smooth = GaussianSmoothing(3, 10, 20)
+    if use_blur:
+        img = smooth(img)
+    if output_blur:
+        pil_t = ToPILImage()
+        im = pil_t(img[0])
+        im.save('blur_output.png')
     cc_list = []
     for i in img:
         bmap = convert_image_to_binary_map(i)
@@ -297,7 +376,7 @@ def test_get_proposals():
     np_expected = np.array(np_expected, dtype='int32')
     expected = torch.from_numpy(np_expected)
     expected, _ = torch.sort(expected)
-    proposals = get_proposals(inp_rand, min_area=0)
+    proposals = get_proposals(inp_rand, min_area=0, use_blur=False)
     proposals, _ = torch.sort(proposals)
     if proposals.shape != expected.shape:
         print(proposals.shape)
@@ -324,7 +403,7 @@ if __name__ == '__main__':
     tens = tens[:3, :, :]
     us = tens.unsqueeze(0)
     start = timer()
-    proposals = get_proposals(us)
+    proposals = get_proposals(us, output_blur=True)
     end = timer()
     print(f'Proposals timer: {end - start}')
     print(f'Number of proposals: {proposals.shape[1]}')

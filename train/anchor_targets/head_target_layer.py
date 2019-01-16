@@ -14,7 +14,7 @@ NEITHER = -1
 NEGATIVE = -2
 
 
-def match(regions, gt_boxes, upper, lower):
+def match(regions, gt_boxes, upper, lower,device):
     """
     Get positive region indexes for each box
     :param regions: predicted regions [KA x 4]
@@ -31,7 +31,7 @@ def match(regions, gt_boxes, upper, lower):
     # now get best prediction for each
     best_score_pred, match_idxs_pred = torch.max(overlaps, dim=1)
     # mask for the boxes with
-    ret = NEITHER * torch.ones(regions.size(0))
+    ret = NEITHER * torch.ones(regions.size(0),device=device)
     mask = best_score_pred >= upper
     # check for empty tensor
     if match_idxs_pred[mask].size(0) > 0:
@@ -62,7 +62,7 @@ class HeadTargetLayer(nn.Module):
         self.cls_loss = CrossEntropyLoss(reduction="mean")
         self.bbox_loss = SmoothL1Loss(10)
 
-    def forward(self, rois, cls_scores, bbox_deltas, gt_boxes, gt_cls):
+    def forward(self, rois, cls_scores, bbox_deltas, gt_boxes, gt_cls,device):
         """
         process proposals from the RPN
         :param rois : [N x L x 4]
@@ -96,7 +96,7 @@ class HeadTargetLayer(nn.Module):
         # now we can apply the bbox deltas to the RoIs
         pred = rois + bbox_deltas
         # Now produce matches [L x 1]
-        matches = match(pred, gt_boxes, self.upper, self.lower)
+        matches = match(pred, gt_boxes, self.upper, self.lower,device)
         pos_mask = matches >= 0
         pos_inds = pos_mask.nonzero()
         neg_mask = matches == NEGATIVE
@@ -109,7 +109,7 @@ class HeadTargetLayer(nn.Module):
         # build the positive labels
         gt_indxs = matches[pos_inds].long()
         pos_labels = gt_cls[gt_indxs].long()
-        neg_labels = self.BACKGROUND*torch.ones(sample_neg_inds.size(0)).long()
+        neg_labels = self.BACKGROUND*torch.ones(sample_neg_inds.size(0)).long().to(device)
         gt_labels = torch.cat((pos_labels, neg_labels))
         pred_scores = torch.cat((cls_scores[pos_inds, :], cls_scores[sample_neg_inds, :]))
         cls_loss = self.cls_loss(pred_scores, gt_labels)

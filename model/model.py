@@ -54,18 +54,17 @@ class MMFasterRCNN(nn.Module):
                                                         kwargs["HEAD"]["INTERMEDIATE"],
                                                         len(self.cls_names))
 
-    def forward(self, img):
+    def forward(self, img, device):
         """
         Process an Image through the network
         :param img: [Nx3xSIZE x SIZE] tensor
-        :param mask: boolean mask of which anchors to process
-            if None, all anchors are processed
-        :return: [(cls_index,[x1, y1, x2, y2])] for each non bg-class
+				:param device: the device to process on         
+				:return: [(cls_index,[x1, y1, x2, y2])] for each non bg-class
         """
         feature_map = self.backbone.forward(img)
         rpn_cls_branch_preds, rpn_cls_branch_scores, rpn_bbox_branch =\
             self.RPN(feature_map)
-        rois = self.proposal_layer(rpn_cls_branch_preds, rpn_bbox_branch)
+        rois = self.proposal_layer(rpn_cls_branch_preds, rpn_bbox_branch, device)
         # TODO needs to be fixed for batching
         rois = rois.squeeze()
         maps = self.ROI_pooling(feature_map, rois)

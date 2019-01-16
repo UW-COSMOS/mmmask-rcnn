@@ -12,9 +12,9 @@ from torch.utils.cpp_extension import CppExtension
 from torch.utils.cpp_extension import CUDAExtension
 
 requirements = ["torch", "torchvision"]
-os.environ["CC"] = "clang++"
-os.environ["CXX"] = "clang++"
-os.environ["CFLAGS"] = "--stdlib=libc++"
+# os.environ["CC"] = "clang++"
+# os.environ["CXX"] = "clang++"
+#os.environ["CFLAGS"] = "--stdlib=libc++"
 def get_extensions():
     this_dir = os.path.dirname(os.path.abspath(__file__))
     extensions_dir = os.path.join(this_dir, "model", "csrc")
