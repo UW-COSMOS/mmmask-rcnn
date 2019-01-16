@@ -64,7 +64,7 @@ class AnchorTargetLayer(nn.Module):
 
         self.bbox_loss = SmoothL1Loss(10)
 
-    def forward(self, cls_scores, bbox_deltas, gt_boxes):
+    def forward(self, cls_scores, bbox_deltas, gt_boxes, device):
         """
         process proposals from the RPN
         :param bbox_deltas: [N x 4K x H x W ]
@@ -91,7 +91,7 @@ class AnchorTargetLayer(nn.Module):
             self.anchors = generate_anchors(self.feat_stride,
                                             cls_scores.size(3),
                                             self.ratios,
-                                            self.scales)
+                                            self.scales).to(device)
 
         H = cls_scores.size(2)
         W = cls_scores.size(3)
@@ -125,14 +125,14 @@ class AnchorTargetLayer(nn.Module):
         bg_num = torch.round(torch.tensor(pos_inds.size(0)*self.bg_ratio)).long()
         perm = torch.randperm(neg_inds.size(0))
         sample_neg_inds = perm[:bg_num]
-        gt_cls = torch.cat((torch.ones(pos_inds.size(0)), torch.zeros(sample_neg_inds.size(0))))
+        gt_cls = torch.cat((torch.ones(pos_inds.size(0)), torch.zeros(sample_neg_inds.size(0)))).to(device)
         # grab cls_scores from each point
         # first we need to reshape the cls_scores to match
         # the anchors
         cls_scores = cls_scores.reshape(batch_size, -1, 1)
         # reshape for pre batching
         cls_scores = cls_scores.squeeze()
-        pred_cls = torch.cat((cls_scores[pos_inds], cls_scores[sample_neg_inds]))
+        pred_cls = torch.cat((cls_scores[pos_inds], cls_scores[sample_neg_inds])).to(device)
         cls_loss = self.cls_loss(pred_cls, gt_cls)
         # we only do bbox regression on positive targets
         # get and reshape matches

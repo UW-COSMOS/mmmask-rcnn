@@ -6,7 +6,7 @@ Author: Josh McGrath
 
 import torch
 from torch import nn
-from model.nms.nms_wrapper import nms
+from model.nms.nms import nms
 from utils.generate_anchors import generate_anchors
 
 
@@ -34,9 +34,10 @@ class ProposalLayer(nn.Module):
         self.NMS_POST = NMS_POST
         self.threshold = threshold
         self.min_size = min_size
+        self.cpu = torch.device("cpu")
         self.anchors = None
 
-    def forward(self, cls_scores, bbox_deltas):
+    def forward(self, cls_scores, bbox_deltas, device):
         """
         process proposals from the RPN
         :param bbox_deltas: [N x 4K x H x W ]
@@ -62,7 +63,7 @@ class ProposalLayer(nn.Module):
             self.anchors = generate_anchors(self.feat_stride,
                                             cls_scores.size(3),
                                             self.ratios,
-                                            self.scales)
+                                            self.scales).to(device)
 
         H = cls_scores.size(2)
         W = cls_scores.size(3)
@@ -95,7 +96,7 @@ class ProposalLayer(nn.Module):
         _, sort_order = cls_scores_pos.topk(pre_nms, dim=1)
         cls_scores_pos = cls_scores_pos[0,sort_order].reshape(-1,1)
         regions = regions[0,sort_order, :].squeeze()
-        keep_idx_i = nms(torch.cat((regions.detach(), cls_scores_pos.detach()), dim=1), self.threshold)
+        keep_idx_i = nms(regions, cls_scores_pos.squeeze(), self.threshold)
         keep_idx_i = keep_idx_i.long().view(-1)
         keep_idx_i = keep_idx_i[:self.NMS_POST]
         proposals = regions[keep_idx_i, :]
