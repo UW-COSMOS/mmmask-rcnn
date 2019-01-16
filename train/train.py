@@ -57,6 +57,7 @@ class TrainerHelper:
                             collate_fn=partial(collate,cls_dict=self.cls))
         for epoch in tqdm(range(self.params["EPOCHS"])):
             for batch in loader:
+                optimizer.zero_grad()
                 # not currently supporting batching
                 optimizer.zero_grad()
                 ex, gt_box, gt_cls = batch
@@ -85,8 +86,6 @@ class TrainerHelper:
 								# print out memory usage
 
                 optimizer.step()
-                
-
 
 
 if __name__ == '__main__':

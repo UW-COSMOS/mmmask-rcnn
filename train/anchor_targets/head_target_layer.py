@@ -59,7 +59,7 @@ class HeadTargetLayer(nn.Module):
         self.bg_ratio = bg_ratio
         self.anchors = None
         self.BACKGROUND = ncls
-        self.cls_loss = CrossEntropyLoss()
+        self.cls_loss = CrossEntropyLoss(reduction="mean")
         self.bbox_loss = SmoothL1Loss(10)
 
     def forward(self, rois, cls_scores, bbox_deltas, gt_boxes, gt_cls,device):
@@ -83,10 +83,6 @@ class HeadTargetLayer(nn.Module):
         """
         L, C = cls_scores.shape
         # ensure center and original anchors have been precomputed
-        print(f"head cls_scores shape: {cls_scores.shape}")
-        print(f"rois shape: {rois.shape}")
-        print(f"bbox_deltas shape: {bbox_deltas.shape}")
-        print(f"gt_boxes shape: {gt_boxes.shape}")
         # drop objectness score
         rois = rois[:, 1:]
         max_scores, score_idxs = torch.max(cls_scores, dim=1)
@@ -118,11 +114,10 @@ class HeadTargetLayer(nn.Module):
         pred_scores = torch.cat((cls_scores[pos_inds, :], cls_scores[sample_neg_inds, :]))
         cls_loss = self.cls_loss(pred_scores, gt_labels)
         # now we can compute the bbox loss
-
         sample_pred_bbox = pred[pos_inds, :]
-        print(f"head pred_shape:{sample_pred_bbox.shape}")
         gt_bbox = gt_boxes[gt_indxs, :]
-        print(f"head gt_bbox_shape: {gt_bbox.shape}")
         gt_bbox = gt_bbox.reshape(-1, 1, 4)
-        bbox_loss = self.bbox_loss(sample_pred_bbox, gt_bbox)
+        # no normalization happens at the head
+        norm = torch.ones(1)
+        bbox_loss = self.bbox_loss(sample_pred_bbox, gt_bbox, norm)
         return cls_loss, bbox_loss
