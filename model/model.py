@@ -8,7 +8,9 @@ from model.backbone.backbone import get_backbone
 from model.rpn.rpn import RPN
 from model.head.object_classifier import MultiModalClassifier
 from model.proposal.proposal_layer import ProposalLayer
+from model.roi.roi_pool import ROIPool
 from model.roi.roi_align import ROIAlign
+from utils.memory import get_gpu_mem
 class MMFasterRCNN(nn.Module):
     def __init__(self, kwargs):
         """

@@ -3,6 +3,7 @@ Training helper class
 Takes a model, dataset, and training paramters
 as arguments
 """
+from time import sleep
 import torch
 import gc
 from torch import optim
@@ -11,6 +12,7 @@ from tqdm import tqdm
 from train.anchor_targets.anchor_target_layer import AnchorTargetLayer
 from train.anchor_targets.head_target_layer import HeadTargetLayer
 from functools import partial
+import bitmath
 
 
 def unpack_cls(cls_dict, gt_list):
@@ -28,6 +30,10 @@ def collate(batch, cls_dict):
     gt_box = [item[1][0] for item in batch]
     gt_cls = [unpack_cls(cls_dict, item[1][1]) for item in batch]
     return torch.stack(exs).float(), gt_box, gt_cls
+
+def format(bytes):
+    return bitmath.Byte(bytes).to_GiB()
+
 
 
 class TrainerHelper:
@@ -54,9 +60,11 @@ class TrainerHelper:
         optimizer = optim.SGD(self.model.parameters(), lr=self.params["LEARNING_RATE"])
         loader = DataLoader(self.dataset,
                             batch_size=self.params["BATCH_SIZE"],
-                            collate_fn=partial(collate,cls_dict=self.cls))
+                            collate_fn=partial(collate,cls_dict=self.cls),
+                            pin_memory=True)
         for epoch in tqdm(range(self.params["EPOCHS"])):
             for batch in loader:
+                print(f"epoch :{epoch}")
                 # not currently supporting batching
                 optimizer.zero_grad()
                 ex, gt_box, gt_cls = batch
@@ -67,25 +75,23 @@ class TrainerHelper:
                 gt_box = gt_box.reshape(1, -1,4).float().to(self.device)
                 # forward pass
                 rpn_cls_scores, rpn_bbox_deltas, rois, cls_preds, cls_scores, bbox_deltas = self.model(ex, self.device)
-                print("forward pass complete")
                 # calculate losses
                 rpn_cls_loss, rpn_bbox_loss = self.anchor_target_layer(rpn_cls_scores, rpn_bbox_deltas,gt_box, self.device)
                 # add gt classes to boxes
                 cls_loss, bbox_loss = self.head_target_layer(rois, cls_scores, bbox_deltas, gt_box, gt_cls, self.device)
-                print(f"rpn_cls_loss: {rpn_cls_loss}, rpn_bbox_loss: {rpn_bbox_loss}")
-                print(f"head_cls_loss: {cls_loss}, bbox_loss: {bbox_loss}")
+                print(f"  rpn_cls_loss: {rpn_cls_loss}, rpn_bbox_loss: {rpn_bbox_loss}")
+                print(f"  head_cls_loss: {cls_loss}, bbox_loss: {bbox_loss}")
                 loss = rpn_cls_loss + rpn_bbox_loss + cls_loss + bbox_loss
                	loss.backward() 
-                print(torch.cuda.memory_allocated(self.device))
-                # for obj in gc.get_objects():
-#                     try:
-                        # if torch.is_tensor(obj) or (hasattr(obj, 'data') and torch.is_tensor(obj.data)):
-                            # print(type(obj), obj.size(), obj.requires_grad)
-                    # except Exception:
-                        # pass
-
+                        
                 optimizer.step()
+                
+def report_mem():
+    for obj in gc.get_objects():
+        try:
+            if torch.is_tensor(obj) or (hasattr(obj, 'data') and torch.is_obj(obj.data)):
+                print(obj.type(), obj.size())
+        except Exception:
+            pass
 
 
-if __name__ == '__main__':
-    pass

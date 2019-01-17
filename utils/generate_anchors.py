@@ -32,4 +32,4 @@ def generate_anchors(feat_stride, map_size, ratios, scales,output_centers=False)
                 anchors[i, j, idx] = np.array((x, y, h, w))
     if output_centers:
         return center_pts, torch.from_numpy(anchors)
-    return torch.from_numpy(anchors)
+    return torch.from_numpy(anchors).requires_grad_(False)

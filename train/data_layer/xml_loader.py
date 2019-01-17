@@ -18,7 +18,11 @@ def mapper(obj):
     """
     bnd = obj.find("bndbox")
     coords = ["xmin", "ymin", "xmax", "ymax"]
-    return obj.find("name").text, [int(float(bnd.find(coord).text)) for coord in coords]
+    pts = [int(float(bnd.find(coord).text)) for coord in coords]
+    x1, y1, x2, y2 = pts
+    w = x2 - x1
+    h = y2-y1
+    return obj.find("name").text, (x1, y1, w,h)
 
 
 def xml2list(fp):

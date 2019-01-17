@@ -139,7 +139,6 @@ def bbox_overlaps(anchors, gt_boxes):
     gt_boxes: (K, 4) ndarray of float
     overlaps: (N, K) ndarray of overlap between boxes and query_boxes
     """
-    print(f"anchors shape:{anchors.shape}, gt_boxes shape: {gt_boxes.shape}")
     N = anchors.size(0)
     K = gt_boxes.size(0)
 
