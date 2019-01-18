@@ -3,9 +3,8 @@ Training helper class
 Takes a model, dataset, and training paramters
 as arguments
 """
-from time import sleep
 import torch
-import gc
+from os.path import join
 from torch import optim
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -64,7 +63,6 @@ class TrainerHelper:
                             pin_memory=True)
         for epoch in tqdm(range(self.params["EPOCHS"])):
             for batch in loader:
-                print(f"epoch :{epoch}")
                 # not currently supporting batching
                 optimizer.zero_grad()
                 ex, gt_box, gt_cls = batch
@@ -83,15 +81,10 @@ class TrainerHelper:
                 print(f"  head_cls_loss: {cls_loss}, bbox_loss: {bbox_loss}")
                 loss = rpn_cls_loss + rpn_bbox_loss + cls_loss + bbox_loss
                	loss.backward() 
-                        
                 optimizer.step()
-                
-def report_mem():
-    for obj in gc.get_objects():
-        try:
-            if torch.is_tensor(obj) or (hasattr(obj, 'data') and torch.is_obj(obj.data)):
-                print(obj.type(), obj.size())
-        except Exception:
-            pass
-
+            #anchor
+            if epoch % self.params["CHECKPOINT_PERIOD"] == 0:
+                name = f"model_{epoch}.pth"
+                path = join(self.params["SAVE_DIR"], name)
+                torch.save(self.model.state_dict(), path)
 
