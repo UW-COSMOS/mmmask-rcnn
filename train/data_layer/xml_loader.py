@@ -52,6 +52,8 @@ def load_image(base_path, identifier, img_type):
     img_data = io.imread(path)
     img_data = img_data.transpose((2, 0, 1))
     img_data = torch.from_numpy(img_data)
+    # squash values into [0,1]
+    img_data = img_data / 255.0
     return img_data
 
 
