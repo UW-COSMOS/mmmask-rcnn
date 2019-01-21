@@ -31,10 +31,10 @@ class MultiModalClassifier(nn.Module):
     def forward(self, roi_maps):
         """
 
-        :param roi_maps: [NxHxWxD]
+        :param roi_maps: [NxLxDHxW]
         :return:
         """
-        N, D, H, W = roi_maps.shape 
+        N, L, D, H, W = roi_maps.shape 
         x = roi_maps.view(N,-1, self.depth * self.width * self.height)
         x = self.FC(x)
         x = relu(x)

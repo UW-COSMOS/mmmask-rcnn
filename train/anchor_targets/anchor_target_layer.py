@@ -62,7 +62,7 @@ class AnchorTargetLayer(nn.Module):
 
         self.cls_loss = BCEWithLogitsLoss(reduction="mean")
 
-        self.bbox_loss = SmoothL1Loss(10)
+        self.bbox_loss = SmoothL1Loss(0.1)
 
     def forward(self, cls_scores, bbox_deltas, gt_boxes, device):
         """

@@ -66,7 +66,6 @@ class TrainerHelper:
                 # not currently supporting batching
                 optimizer.zero_grad()
                 ex, gt_box, gt_cls = batch
-                print(f"ex: {ex.shape}")
                 ex = ex.to(self.device)
                 gt_box = gt_box
                 gt_cls = [gt.to(self.device) for gt in gt_cls]

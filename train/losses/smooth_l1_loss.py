@@ -33,15 +33,12 @@ class SmoothL1Loss(nn.Module):
         # print(f"box_diff: {box_diff}")
         signs = (box_diff < 1).detach().float()
         signs_inv = (box_diff >= 1).detach().float()
-        # print(signs)
         smooth_l1 = (torch.pow(box_diff,2) * 0.5 * signs) + ((box_diff - 0.5) * signs_inv)
-        # print(f"post cases: {smooth_l1}")
         # sum along 3rd dim
         smooth_l1 = smooth_l1.sum(2)
         smooth_l1 = smooth_l1.sum(1)
-        # print(f"pre flattening smooth_l1: {smooth_l1}")
         smooth_l1 = smooth_l1.sum()/norm
-        return smooth_l1
+        return self.lamb*smooth_l1
 
 
 
