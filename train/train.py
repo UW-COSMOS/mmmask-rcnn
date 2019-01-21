@@ -66,11 +66,11 @@ class TrainerHelper:
                 # not currently supporting batching
                 optimizer.zero_grad()
                 ex, gt_box, gt_cls = batch
-                # fix for batching
+                print(f"ex: {ex.shape}")
                 ex = ex.to(self.device)
-                gt_box = gt_box[0]
-                gt_cls = gt_cls[0].to(self.device)
-                gt_box = gt_box.reshape(1, -1,4).float().to(self.device)
+                gt_box = gt_box
+                gt_cls = [gt.to(self.device) for gt in gt_cls]
+                gt_box = [gt.reshape(1, -1,4).float().to(self.device) for gt in gt_box]
                 # forward pass
                 rpn_cls_scores, rpn_bbox_deltas, rois, cls_preds, cls_scores, bbox_deltas = self.model(ex, self.device)
                 # calculate losses

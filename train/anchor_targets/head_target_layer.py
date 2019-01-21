@@ -81,17 +81,17 @@ class HeadTargetLayer(nn.Module):
         4)  
         
         """
-        L, C = cls_scores.shape
+        N, L, C = cls_scores.shape
         # ensure center and original anchors have been precomputed
         # drop objectness score
-        rois = rois[:, 1:]
-        max_scores, score_idxs = torch.max(cls_scores, dim=1)
-        # reshape bbox deltas to be [ L x C x 4] so we can index by score_idx
-        # TODO change before batching
-        bbox_deltas = bbox_deltas.reshape(L, C, 4)
-        gt_boxes = gt_boxes.squeeze(0)
+        rois = rois[:, :, 1:]
+        max_scores, score_idxs = torch.max(cls_scores, dim=2)
+        print(f"score_idxs: {score_idxs.shape}")
+        # reshape bbox deltas to be [N, L x C x 4] so we can index by score_idx
+        bbox_deltas = bbox_deltas.reshape(N, L, C, 4)
         # filter to only the boxes we want
-        bbox_deltas = torch.stack([bbox_deltas[roi, idx, :] for roi, idx in enumerate(score_idxs)])
+
+        bbox_deltas = torch.stack([bbox_deltas[img,roi, idx, :] for (img, roi), idx in enumerate(score_idxs)])
         bbox_deltas = bbox_deltas.squeeze()
         # now we can apply the bbox deltas to the RoIs
         pred = rois + bbox_deltas
