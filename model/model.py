@@ -83,7 +83,6 @@ class MMFasterRCNN(nn.Module):
         else:
             rois = self.proposal_layer(img, verbose=True)
             rois.to(device)
-        # TODO needs to be fixed for batching
         rois = rois.squeeze()
         maps = self.ROI_pooling(feature_map, rois)
         cls_preds, cls_scores, bbox_deltas = self.classification_head(maps)
