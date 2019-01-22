@@ -328,7 +328,7 @@ def grid_proposal(img, recurse_depth=4):
         row_crop_imgs.append()
 
 
-def get_proposals(img, min_area=0, use_blur=True, output_blur=False):
+def get_proposals(img, verbose=False, min_area=0, use_blur=True, output_blur=False):
     """
     Get the proposals from the img tensors
     :param img: [N x 3 x HEIGHT x WIDTH] tensor
@@ -345,9 +345,14 @@ def get_proposals(img, min_area=0, use_blur=True, output_blur=False):
         im.save('blur_output.png')
     cc_list = []
     for i in img:
+        start_bmap = timer()
         bmap = convert_image_to_binary_map(i)
+        end_bmap = timer()
+        start_comp = timer()
         components = get_components(bmap)
+        end_cmp = timer()
         components_set = set()
+        start_cross = timer()
         for ind, component in enumerate(components):
             for next_component in components[ind+1:]:
                 tl_x1, tl_y1, br_x1, br_y1 = component
@@ -363,6 +368,13 @@ def get_proposals(img, min_area=0, use_blur=True, output_blur=False):
         components_list = list(components_set)
         components_list = [list(x) for x in components_list]
         cc_list.append(components_list)
+        end_cross = timer()
+    if verbose:
+        print('get_proposal Timers\n------')
+        print(f'Image to binary map: {end_bmap - start_bmap} s')
+        print(f'Get components: {end_cmp - start_cmp} s')
+        print(f'Cross components: {end_cross - start_cross} s')
+
     np_cc = np.array(cc_list, dtype='int32')
     return torch.from_numpy(np_cc)
 

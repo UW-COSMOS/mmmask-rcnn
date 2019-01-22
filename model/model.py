@@ -11,6 +11,7 @@ from model.proposal.proposal_layer import ProposalLayer
 from model.roi.roi_pool import ROIPool
 from model.roi.roi_align import ROIAlign
 from utils.memory import get_gpu_mem
+from model.connected_components import connected_components as cc
 class MMFasterRCNN(nn.Module):
     def __init__(self, kwargs):
         """
@@ -18,6 +19,7 @@ class MMFasterRCNN(nn.Module):
         :param kwargs: configuration for the network, see model configs
         """
         super(MMFasterRCNN, self).__init__()
+        self.kwargs = kwargs
         self.img_size = kwargs["IMG_SIZE"]
         self.scales = kwargs["SCALES"]
         self.ratios = kwargs["RATIOS"]
@@ -25,22 +27,26 @@ class MMFasterRCNN(nn.Module):
 
         # size should be informed at least partially by the receptive field
         # ensure this is meant to be a free parameter
-        self.RPN = RPN(
-            self.backbone.output_depth,
-            kwargs["RPN"]["DEPTH"],
-            kwargs["RATIOS"],
-            kwargs["SCALES"],
-            kwargs["RPN"]["WINDOW_SIZE"]
-        )
-        self.proposal_layer = ProposalLayer(
-            kwargs["RATIOS"],
-            kwargs["SCALES"],
-            kwargs["IMG_SIZE"],
-            kwargs["PROPOSAL"]["NMS_PRE"],
-            kwargs["PROPOSAL"]["NMS_POST"],
-            kwargs["PROPOSAL"]["MIN_SIZE"],
-            kwargs["PROPOSAL"]["NMS_THRESHOLD"]
-        )
+        if kwargs["PROPOSAL"]["METHOD"] == "RPN":
+            self.RPN = RPN(
+                self.backbone.output_depth,
+                kwargs["RPN"]["DEPTH"],
+                kwargs["RATIOS"],
+                kwargs["SCALES"],
+                kwargs["RPN"]["WINDOW_SIZE"]
+            )
+            self.proposal_layer = ProposalLayer(
+                kwargs["RATIOS"],
+                kwargs["SCALES"],
+                kwargs["IMG_SIZE"],
+                kwargs["PROPOSAL"]["NMS_PRE"],
+                kwargs["PROPOSAL"]["NMS_POST"],
+                kwargs["PROPOSAL"]["MIN_SIZE"],
+                kwargs["PROPOSAL"]["NMS_THRESHOLD"]
+            )
+        else:
+            self.RPN = None
+            self.proposal_layer = cc.get_proposals
         #TODO spatial scale?
         output_size = (kwargs["ROI_POOL"]["OUTPUT_SIZE"],kwargs["ROI_POOL"]["OUTPUT_SIZE"])
         self.ROI_pooling = ROIAlign(
@@ -64,9 +70,13 @@ class MMFasterRCNN(nn.Module):
 				:return: [(cls_index,[x1, y1, x2, y2])] for each non bg-class
         """
         feature_map = self.backbone.forward(img)
-        rpn_cls_branch_preds, rpn_cls_branch_scores, rpn_bbox_branch =\
-            self.RPN(feature_map)
-        rois = self.proposal_layer(rpn_cls_branch_preds, rpn_bbox_branch, device)
+        if self.RPN is not None:
+            rpn_cls_branch_preds, rpn_cls_branch_scores, rpn_bbox_branch =\
+                self.RPN(feature_map)
+            rois = self.proposal_layer(rpn_cls_branch_preds, rpn_bbox_branch, device)
+        else:
+            rois = self.proposal_layer(img, verbose=True)
+            rois.to(device)
         # TODO needs to be fixed for batching
         rois = rois.squeeze()
         maps = self.ROI_pooling(feature_map, rois)
