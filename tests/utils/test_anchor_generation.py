@@ -16,9 +16,16 @@ base_image = Image.new("RGB", (image_size, image_size), color="#FFF")
 centers, anchors = generate_anchors(feat_stride, map_size, ratios, scales, output_centers=True)
 draw = ImageDraw.Draw(base_image)
 centers = centers.reshape(-1, 2)
+print(anchors)
 
 for x,y in centers.astype(int):
     draw.ellipse((x-r, y-r, x+r, y+r), fill="#f00")
+i,j = 6,6
+for idx in range(9):
+    x, y, h, w = anchors[i, j, idx]
+    x2 = x + w
+    y2 = y + h
+    draw.rectangle((x, y, x2, y2), outline="#00f")
 base_image.save("out.png", "PNG")
 
 
