@@ -62,7 +62,7 @@ class MMFasterRCNN(nn.Module):
                                                         kwargs["HEAD"]["INTERMEDIATE"],
                                                         len(self.cls_names))
 
-    def forward(self, img, device):
+    def forward(self, img, device=torch.device("cpu")):
         """
         Process an Image through the network
         :param img: [Nx3xSIZE x SIZE] tensor

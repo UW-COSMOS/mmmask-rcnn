@@ -5,7 +5,10 @@ Author: Josh McGrath
 from torch import nn
 import torch
 
-
+X = 0
+Y = 1
+W = 2
+H = 3
 
 class SmoothL1Loss(nn.Module):
     def __init__(self, lamb, reduce=False):
@@ -17,8 +20,10 @@ class SmoothL1Loss(nn.Module):
         self.lamb = lamb
         self.reduce = reduce
 
-
-    def forward(self, out, gt, norm):
+    """
+    all tensors are indexed by [L, x, y, h, w]
+    """
+    def forward(self, out, gt, roi, norm):
         """
         compute the smooth L1 loss for a set of gt boxes
         we assume all examples are to be counted in the loss
@@ -28,7 +33,15 @@ class SmoothL1Loss(nn.Module):
         :param norm: normalization factor, usually the number of anchors
         :return: [N] losses or if reduce is on, the mean of these losses
         """
-        box_diff = out - gt
+        t_x = (out[:, :, X] - roi[:, :, X])/roi[:, :, W]
+        t_y = (out[:,:,Y] - roi[:, :, Y])/roi[:, :, Y]
+        t_w = torch.log(out[:, :, W]/roi[:, :,W])
+        t_h = torch.log(out[:, :, H]/roi[:, :,H])
+        gt_x = (out[:, :, X] - roi[:, :, X])/roi[:, :, W]
+        gt_y = (out[:,:,Y] - roi[:, :, Y])/roi[:, :, Y]
+        gt_w = torch.log(out[:, :, W]/roi[:, :,W])
+        gt_h = torch.log(out[:, :, H]/roi[:, :,H])
+
         box_diff = torch.abs(box_diff)
         # print(f"box_diff: {box_diff}")
         signs = (box_diff < 1).detach().float()

@@ -124,6 +124,7 @@ class HeadTargetLayer(nn.Module):
             cls_loss += self.cls_loss(pred_scores, gt_labels)
             # now we can compute the bbox loss
             sample_pred_bbox = pred_batch[pos_inds, :].unsqueeze(0)
+			sample_roi_bbox = roi[idx, pos_inds, :].unsqueeze(0)
             gt_bbox = gt_box[gt_indxs, :]
             gt_bbox = gt_bbox.reshape(-1, 1, 4)
             # no normalization happens at the head
