@@ -19,4 +19,8 @@ ROI_POOL:
   SPATIAL_SCALE: 7
   SAMPLING_RATIO: 2
 CLASSES:
-  NAMES: ["cat", "person"]
+  NAMES: ["aeroplane", "bicycle", "bird", "bottle",
+      "boat", "bus", "car", "cat", "chair", "cow",
+        "diningtable", "dog", "horse", "motorbike",
+ "person", "pottedplant", "sheep", "sofa", "train", "tvmonitor"]       
+

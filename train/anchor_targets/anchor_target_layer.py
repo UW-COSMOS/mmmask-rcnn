@@ -28,23 +28,30 @@ def match(regions, gt_boxes, upper, lower, device):
     """
     # get ious for each predicted box and gt target
     # get back an NxM tensor of IOUs
+    print("regions shape",regions.shape)
+    print("gt boxes shape", gt_boxes.shape)
+    print("regions",regions)
+    print("gt_boxes", gt_boxes)
     overlaps = bbox_overlaps(regions, gt_boxes)
+    print(overlaps.nonzero())
     # now get best prediction for each
     best_score_pred, match_idxs_pred = torch.max(overlaps, dim=1)
     # mask for the boxes with
-    ret = NEITHER*torch.ones(regions.size(0)).to(device)
+    ret = NEITHER*torch.ones(regions.size(0)).to(device).long()
     mask = best_score_pred >= upper
     # check for empty tensor
     if match_idxs_pred[mask].size(0) > 0:
-        ret[mask] = match_idxs_pred[mask].float()
+        ret[mask] = match_idxs_pred[mask]
     # now we need the highest iou wrt to each
     # get back a vector indexed by gt_boxes which we need to
     # index back to targets
     best_score_gt, match_idxs_gt = torch.max(overlaps, dim=0)
-    ret[match_idxs_gt] = torch.arange(0, gt_boxes.size(0))
+    ret[match_idxs_gt] = torch.arange(0, gt_boxes.size(0)).to(device)
     # finally, for anything with max iou < lower add a negative value
     mask = best_score_pred < lower
     ret[mask] = NEGATIVE
+    print(ret)
+    exit()
     return ret
 
 
@@ -125,13 +132,16 @@ class AnchorTargetLayer(nn.Module):
             neg_inds = neg_mask.nonzero()
             # now we downsample the negative targets
             pos_inds = pos_inds.reshape(-1)
+            print("pos_inds ",pos_inds)
             bg_num = torch.round(torch.tensor(pos_inds.size(0)*self.bg_ratio)).long()
             perm = torch.randperm(neg_inds.size(0))
             sample_neg_inds = perm[:bg_num]
             gt_cls = torch.cat((torch.ones(pos_inds.size(0)), torch.zeros(sample_neg_inds.size(0)))).to(device)
             # grab cls_scores from each point
             pred_cls = torch.cat((cls_scores[i,pos_inds], cls_scores[i,sample_neg_inds])).to(device).squeeze()
+            ##print("cls_loss inputs ", pred_cls, gt_cls)
             cls_loss = self.cls_loss(pred_cls, gt_cls)
+            ##print("cls_loss",cls_loss)
             # we only do bbox regression on positive targets
             # get and reshape matches
             gt_indxs = matches[pos_inds].long()
@@ -139,6 +149,7 @@ class AnchorTargetLayer(nn.Module):
             sample_pred_bbox = regions[i,pos_inds, :]
             sample_roi_bbox = _anchors[pos_inds, :]            
             norm = torch.tensor(N).float()
+            print("bbox inputs", sample_pred_bbox, sample_roi_bbox, sample_gt_bbox)
             bbox_loss = self.bbox_loss(sample_pred_bbox, sample_gt_bbox,sample_roi_bbox, norm)
             tot_cls_loss = tot_cls_loss + cls_loss
             tot_bbox_loss = tot_bbox_loss + bbox_loss

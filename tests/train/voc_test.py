@@ -8,13 +8,18 @@ from train.data_layer.xml_loader import XMLLoader
 from train.train import TrainerHelper
 import yaml
 import torch
+from  argparse import ArgumentParser
 
+parser = ArgumentParser(description="run on a PASCAL VOC dataset")
+parser.add_argument('img_path', type=str)
+parser.add_argument('anno_path', type=str)
+args = parser.parse_args()
 device = None
 if torch.cuda.is_available():
     device = torch.device("cuda")
 else:
     device = torch.device("cpu")
-loader = XMLLoader("data/annotations", "data/images", "jpg")
+loader = XMLLoader(args.anno_path, args.img_path, "jpg")
 dataset = GTDataset(loader)
 train_config = yaml.load(open("train_config.yaml").read())
 model_config = yaml.load(open("model_config.yaml").read())

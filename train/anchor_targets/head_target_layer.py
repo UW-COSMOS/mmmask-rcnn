@@ -29,10 +29,11 @@ def match(regions, gt_boxes, upper, lower,device):
     # get ious for each predicted box and gt target
     # get back an NxM tensor of IOUs
     overlaps = bbox_overlaps(regions, gt_boxes)
+    print(overlaps)
     # now get best prediction for each
     best_score_pred, match_idxs_pred = torch.max(overlaps, dim=1)
     # mask for the boxes with
-    ret = NEITHER * torch.ones(regions.size(0),device=device)
+    ret = NEITHER * torch.ones(regions.size(0),device=device).long()
     mask = best_score_pred >= upper
     # check for empty tensor
     if match_idxs_pred[mask].size(0) > 0:
@@ -41,10 +42,11 @@ def match(regions, gt_boxes, upper, lower,device):
     # get back a vector indexed by gt_boxes which we need to
     # index back to targets
     best_score_gt, match_idxs_gt = torch.max(overlaps, dim=0)
-    ret[match_idxs_gt] = torch.arange(0, gt_boxes.size(0))
+    ret[match_idxs_gt] = torch.arange(0, gt_boxes.size(0)).to(device)
     # finally, for anything with max iou < lower add a negative value
     mask = best_score_pred < lower
     ret[mask] = NEGATIVE
+    print(ret)
     return ret
 
 
@@ -112,6 +114,7 @@ class HeadTargetLayer(nn.Module):
             neg_inds = neg_mask.nonzero()
             # sample down
             pos_inds = pos_inds.reshape(-1)
+            print(f"pos_inds: {pos_inds}")
             bg_num = torch.round(torch.tensor(pos_inds.size(0) * self.bg_ratio)).long()
             perm = torch.randperm(neg_inds.size(0))
             sample_neg_inds = perm[:bg_num].to(device)
@@ -121,6 +124,7 @@ class HeadTargetLayer(nn.Module):
             neg_labels = self.BACKGROUND*torch.ones(sample_neg_inds.size(0)).long().to(device)
             gt_labels = torch.cat((pos_labels, neg_labels))
             pred_scores = torch.cat((cls_scores[idx,pos_inds, :], cls_scores[idx,sample_neg_inds, :]))
+            print(f"pred_scores:{pred_scores}, gt_labels: {gt_labels}")
             cls_loss += self.cls_loss(pred_scores, gt_labels)
             # now we can compute the bbox loss
             sample_pred_bbox = pred_batch[pos_inds, :]
