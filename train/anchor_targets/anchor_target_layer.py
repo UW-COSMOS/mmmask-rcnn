@@ -97,7 +97,6 @@ class AnchorTargetLayer(nn.Module):
         batch_size = cls_scores.size(0)
         # TODO support batching
         cls_scores = cls_scores.permute(0,2, 3, 1)
-
         # apply bbox deltas but first reshape to (batch,H,W,4K)
         bbox_deltas = bbox_deltas.permute(0, 2, 3, 1)
         # reshape again to match anchors (N,H,W,Kx4)
@@ -110,6 +109,8 @@ class AnchorTargetLayer(nn.Module):
         regions = regions.view(batch_size, -1, 4, H, W).permute(0, 3, 4, 1, 2)
         # reshaped to [batch x L x 4]
         regions = regions.reshape(batch_size, -1, 4)
+        # we need anchors to be [L x 4]
+        _anchors = _anchors.reshape(-1,4)
         #get matches/ losses per batch
         cls_scores = cls_scores.reshape(batch_size, -1, 1)
         # keeping full history is purposeful
@@ -134,10 +135,11 @@ class AnchorTargetLayer(nn.Module):
             # we only do bbox regression on positive targets
             # get and reshape matches
             gt_indxs = matches[pos_inds].long()
-            sample_gt_bbox = gt_boxes[i][gt_indxs, :]
+            sample_gt_bbox = gt_boxes[i][gt_indxs, :].reshape(-1,4)
             sample_pred_bbox = regions[i,pos_inds, :]
+            sample_roi_bbox = _anchors[pos_inds, :]            
             norm = torch.tensor(N).float()
-            bbox_loss = self.bbox_loss(sample_pred_bbox, sample_gt_bbox, norm)
+            bbox_loss = self.bbox_loss(sample_pred_bbox, sample_gt_bbox,sample_roi_bbox, norm)
             tot_cls_loss = tot_cls_loss + cls_loss
             tot_bbox_loss = tot_bbox_loss + bbox_loss
         return tot_cls_loss, tot_bbox_loss

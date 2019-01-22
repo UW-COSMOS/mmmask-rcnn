@@ -62,7 +62,7 @@ class MMFasterRCNN(nn.Module):
                                                         kwargs["HEAD"]["INTERMEDIATE"],
                                                         len(self.cls_names))
 
-    def forward(self, img, device):
+    def forward(self, img, device=torch.device("cpu")):
         """
         Process an Image through the network
         :param img: [Nx3xSIZE x SIZE] tensor
@@ -83,8 +83,6 @@ class MMFasterRCNN(nn.Module):
         else:
             rois = self.proposal_layer(img, verbose=True)
             rois.to(device)
-        # TODO needs to be fixed for batching
-        rois = rois.squeeze()
         cls_preds, cls_scores, bbox_deltas = self.classification_head(maps)
         return rpn_cls_branch_scores, rpn_bbox_branch, rois, cls_preds, cls_scores, bbox_deltas
 

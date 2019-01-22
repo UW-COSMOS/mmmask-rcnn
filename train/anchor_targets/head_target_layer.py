@@ -61,7 +61,7 @@ class HeadTargetLayer(nn.Module):
         self.anchors = None
         self.BACKGROUND = ncls
         self.cls_loss = CrossEntropyLoss(reduction="mean")
-        self.bbox_loss = SmoothL1Loss(0.1)
+        self.bbox_loss = SmoothL1Loss(10)
 
     def forward(self, rois, cls_scores, bbox_deltas, gt_boxes, gt_clses,device):
         """
@@ -123,9 +123,10 @@ class HeadTargetLayer(nn.Module):
             pred_scores = torch.cat((cls_scores[idx,pos_inds, :], cls_scores[idx,sample_neg_inds, :]))
             cls_loss += self.cls_loss(pred_scores, gt_labels)
             # now we can compute the bbox loss
-            sample_pred_bbox = pred_batch[pos_inds, :].unsqueeze(0)
+            sample_pred_bbox = pred_batch[pos_inds, :]
+            sample_roi_bbox = rois[idx, pos_inds, :]
             gt_bbox = gt_box[gt_indxs, :]
-            gt_bbox = gt_bbox.reshape(-1, 1, 4)
+            gt_bbox = gt_bbox.reshape(-1,4)
             # no normalization happens at the head
-            bbox_loss += self.bbox_loss(sample_pred_bbox, gt_bbox, N)
+            bbox_loss += self.bbox_loss(sample_pred_bbox, gt_bbox,sample_roi_bbox, N)
         return cls_loss, bbox_loss
