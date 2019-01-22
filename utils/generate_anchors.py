@@ -25,12 +25,11 @@ def generate_anchors(feat_stride, map_size, ratios, scales,output_centers=False)
         for j in range(map_size):
             x, y = center_pts[i, j]
             for idx, (ratio, scale) in enumerate(product(ratios, scales)):
-                #print(ratio, scale)
-                x = x - scale/2.0
-                y = y - scale*ratio/2.0
+                x1 = x - scale/2.0
+                y1 = y - scale*ratio/2.0
                 h = scale*ratio
                 w = scale
-                anchors[i, j, idx] = np.array((x, y, h, w))
+                anchors[i, j, idx] = np.array((x1, y1, h, w))
     if output_centers:
         return center_pts, torch.from_numpy(anchors)
     return torch.from_numpy(anchors).requires_grad_(False)
