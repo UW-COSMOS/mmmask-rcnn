@@ -69,11 +69,17 @@ class MMFasterRCNN(nn.Module):
 				:param device: the device to process on         
 				:return: [(cls_index,[x1, y1, x2, y2])] for each non bg-class
         """
+        N = img.size(0)
         feature_map = self.backbone.forward(img)
         if self.RPN is not None:
             rpn_cls_branch_preds, rpn_cls_branch_scores, rpn_bbox_branch =\
                 self.RPN(feature_map)
             rois = self.proposal_layer(rpn_cls_branch_preds, rpn_bbox_branch, device)
+            maps = []
+            for batch_el in range(N):
+                map = self.ROI_pooling(feature_map, rois[batch_el])
+                maps.append(map)
+            maps = torch.stack(maps)
         else:
             rois = self.proposal_layer(img, verbose=True)
             rois.to(device)

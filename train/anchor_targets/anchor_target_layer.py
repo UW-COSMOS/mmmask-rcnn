@@ -62,7 +62,7 @@ class AnchorTargetLayer(nn.Module):
 
         self.cls_loss = BCEWithLogitsLoss(reduction="mean")
 
-        self.bbox_loss = SmoothL1Loss(10)
+        self.bbox_loss = SmoothL1Loss(0.1)
 
     def forward(self, cls_scores, bbox_deltas, gt_boxes, device):
         """
@@ -93,19 +93,15 @@ class AnchorTargetLayer(nn.Module):
                                             self.ratios,
                                             self.scales).to(device)
 
-        H = cls_scores.size(2)
-        W = cls_scores.size(3)
+        N, _, H, W = cls_scores.shape
         batch_size = cls_scores.size(0)
         # TODO support batching
-        cls_scores = cls_scores.squeeze()
-        cls_scores = cls_scores.permute(1, 2, 0)
+        cls_scores = cls_scores.permute(0,2, 3, 1)
 
         # apply bbox deltas but first reshape to (batch,H,W,4K)
         bbox_deltas = bbox_deltas.permute(0, 2, 3, 1)
-        # squeeze out batch dimension
-        bbox_deltas = bbox_deltas.squeeze()
-        # reshape again to match anchors (H,W,Kx4)
-        bbox_deltas = bbox_deltas.reshape(bbox_deltas.shape[0], bbox_deltas.shape[1], -1, 4)
+        # reshape again to match anchors (N,H,W,Kx4)
+        bbox_deltas = bbox_deltas.reshape(N, H, W, -1, 4)
         _anchors = self.anchors.float()
         regions = _anchors + bbox_deltas
         # now we clip the boxes to the image
@@ -114,36 +110,37 @@ class AnchorTargetLayer(nn.Module):
         regions = regions.view(batch_size, -1, 4, H, W).permute(0, 3, 4, 1, 2)
         # reshaped to [batch x L x 4]
         regions = regions.reshape(batch_size, -1, 4)
-        matches = match(regions.squeeze(0), gt_boxes[:, :4].squeeze(0), self.upper, self.lower, device)
-        # filter out neither targets
-        pos_mask = matches >= 0
-        pos_inds = pos_mask.nonzero()
-        neg_mask = matches == NEGATIVE
-        neg_inds = neg_mask.nonzero()
-        # now we downsample the negative targets
-        pos_inds = pos_inds.reshape(-1)
-        bg_num = torch.round(torch.tensor(pos_inds.size(0)*self.bg_ratio)).long()
-        perm = torch.randperm(neg_inds.size(0))
-        sample_neg_inds = perm[:bg_num]
-        gt_cls = torch.cat((torch.ones(pos_inds.size(0)), torch.zeros(sample_neg_inds.size(0)))).to(device)
-        # grab cls_scores from each point
-        # first we need to reshape the cls_scores to match
-        # the anchors
+        #get matches/ losses per batch
         cls_scores = cls_scores.reshape(batch_size, -1, 1)
-        # reshape for pre batching
-        cls_scores = cls_scores.squeeze()
-        pred_cls = torch.cat((cls_scores[pos_inds], cls_scores[sample_neg_inds])).to(device)
-        cls_loss = self.cls_loss(pred_cls, gt_cls)
-        # we only do bbox regression on positive targets
-        # get and reshape matches
-        gt_indxs = matches[pos_inds].long()
-        sample_gt_bbox = gt_boxes[gt_indxs, :]
-        # TODO fix when implementing batches
-        regions = regions.squeeze(0)
-        sample_pred_bbox = regions[pos_inds, :]
-        norm = torch.tensor(self.anchors.size(0)).float()
-        bbox_loss = self.bbox_loss(sample_pred_bbox, sample_gt_bbox, norm)
-        return cls_loss, bbox_loss
+        # keeping full history is purposeful
+        tot_cls_loss = 0
+        tot_bbox_loss = 0
+        for i in range(N):
+            matches = match(regions[i], gt_boxes[i][:, :4].squeeze(0), self.upper, self.lower, device)
+            # filter out neither targets
+            pos_mask = matches >= 0
+            pos_inds = pos_mask.nonzero()
+            neg_mask = matches == NEGATIVE
+            neg_inds = neg_mask.nonzero()
+            # now we downsample the negative targets
+            pos_inds = pos_inds.reshape(-1)
+            bg_num = torch.round(torch.tensor(pos_inds.size(0)*self.bg_ratio)).long()
+            perm = torch.randperm(neg_inds.size(0))
+            sample_neg_inds = perm[:bg_num]
+            gt_cls = torch.cat((torch.ones(pos_inds.size(0)), torch.zeros(sample_neg_inds.size(0)))).to(device)
+            # grab cls_scores from each point
+            pred_cls = torch.cat((cls_scores[i,pos_inds], cls_scores[i,sample_neg_inds])).to(device).squeeze()
+            cls_loss = self.cls_loss(pred_cls, gt_cls)
+            # we only do bbox regression on positive targets
+            # get and reshape matches
+            gt_indxs = matches[pos_inds].long()
+            sample_gt_bbox = gt_boxes[i][gt_indxs, :]
+            sample_pred_bbox = regions[i,pos_inds, :]
+            norm = torch.tensor(N).float()
+            bbox_loss = self.bbox_loss(sample_pred_bbox, sample_gt_bbox, norm)
+            tot_cls_loss = tot_cls_loss + cls_loss
+            tot_bbox_loss = tot_bbox_loss + bbox_loss
+        return tot_cls_loss, tot_bbox_loss
 
 
 

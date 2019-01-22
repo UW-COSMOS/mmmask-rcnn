@@ -31,18 +31,17 @@ class MultiModalClassifier(nn.Module):
     def forward(self, roi_maps):
         """
 
-        :param roi_maps: [NxHxWxD]
+        :param roi_maps: [NxLxDHxW]
         :return:
         """
-        x = roi_maps.view(-1, self.depth * self.width * self.height)
-        # TODO support batching
+        N, L, D, H, W = roi_maps.shape 
+        x = roi_maps.view(N,-1, self.depth * self.width * self.height)
         x = self.FC(x)
         x = relu(x)
         x = self.FC_2(x)
         x = relu(x)
         cls_scores = self.cls_branch(x)
         bbox_scores = self.bbox_branch(x)
-        # TODO ensure this is the correct dimension
-        return softmax(cls_scores, dim=1), cls_scores, bbox_scores
+        return softmax(cls_scores, dim=2), cls_scores, bbox_scores
 
 
