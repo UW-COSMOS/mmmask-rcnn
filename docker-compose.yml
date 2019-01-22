@@ -1,10 +1,7 @@
 version: "2.3"
 services:
     test:
-        image: multi
+        build: .
         runtime: nvidia
-        user: $$(id -u):$$(id -g)
-        volumes: 
-            - $PWD:/app
-
+        ipc: host
 
