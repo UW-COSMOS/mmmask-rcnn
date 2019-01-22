@@ -85,7 +85,6 @@ class MMFasterRCNN(nn.Module):
             rois.to(device)
         # TODO needs to be fixed for batching
         rois = rois.squeeze()
-        maps = self.ROI_pooling(feature_map, rois)
         cls_preds, cls_scores, bbox_deltas = self.classification_head(maps)
         return rpn_cls_branch_scores, rpn_bbox_branch, rois, cls_preds, cls_scores, bbox_deltas
 
