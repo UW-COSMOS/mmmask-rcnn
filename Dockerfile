@@ -76,13 +76,17 @@ RUN conda install -y -c menpo opencv3=3.1.0 \
 # Set the default command to python3
 CMD ["python3"]
 
+USER root
+
+RUN apt-get update && apt-get -y install gcc g++
+
 COPY . .
+
+USER user
 
 RUN pip install -r requirements.txt --user
 
 USER root
-
-RUN apt-get update && apt-get -y install gcc g++
 
 RUN python3 setup.py build develop
 
