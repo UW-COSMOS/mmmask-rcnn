@@ -6,7 +6,7 @@ Author: Josh McGrath
 import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
-from .bbox_transform import bbox_overlaps
+from utils.bbox_overlaps import bbox_overlaps
 from utils.generate_anchors import generate_anchors
 from train.losses.smooth_l1_loss import SmoothL1Loss
 from time import sleep
@@ -28,8 +28,7 @@ def match(regions, gt_boxes, upper, lower,device):
     """
     # get ious for each predicted box and gt target
     # get back an NxM tensor of IOUs
-    overlaps = bbox_overlaps(regions, gt_boxes)
-    print(overlaps)
+    overlaps = bbox_overlaps(regions, gt_boxes, device)
     # now get best prediction for each
     best_score_pred, match_idxs_pred = torch.max(overlaps, dim=1)
     # mask for the boxes with
@@ -37,7 +36,7 @@ def match(regions, gt_boxes, upper, lower,device):
     mask = best_score_pred >= upper
     # check for empty tensor
     if match_idxs_pred[mask].size(0) > 0:
-        ret[mask] = match_idxs_pred[mask].float()
+        ret[mask] = match_idxs_pred[mask]
     # now we need the highest iou wrt to each
     # get back a vector indexed by gt_boxes which we need to
     # index back to targets
@@ -46,7 +45,6 @@ def match(regions, gt_boxes, upper, lower,device):
     # finally, for anything with max iou < lower add a negative value
     mask = best_score_pred < lower
     ret[mask] = NEGATIVE
-    print(ret)
     return ret
 
 
@@ -114,8 +112,7 @@ class HeadTargetLayer(nn.Module):
             neg_inds = neg_mask.nonzero()
             # sample down
             pos_inds = pos_inds.reshape(-1)
-            print(f"pos_inds: {pos_inds}")
-            bg_num = torch.round(torch.tensor(pos_inds.size(0) * self.bg_ratio)).long()
+            bg_num = torch.round(torch.tensor(pos_inds.size(0) * self.bg_ratio)).long() +1
             perm = torch.randperm(neg_inds.size(0))
             sample_neg_inds = perm[:bg_num].to(device)
             # build the positive labels
@@ -124,8 +121,8 @@ class HeadTargetLayer(nn.Module):
             neg_labels = self.BACKGROUND*torch.ones(sample_neg_inds.size(0)).long().to(device)
             gt_labels = torch.cat((pos_labels, neg_labels))
             pred_scores = torch.cat((cls_scores[idx,pos_inds, :], cls_scores[idx,sample_neg_inds, :]))
-            print(f"pred_scores:{pred_scores}, gt_labels: {gt_labels}")
-            cls_loss += self.cls_loss(pred_scores, gt_labels)
+            l = self.cls_loss(pred_scores, gt_labels)
+            cls_loss += l 
             # now we can compute the bbox loss
             sample_pred_bbox = pred_batch[pos_inds, :]
             sample_roi_bbox = rois[idx, pos_inds, :]

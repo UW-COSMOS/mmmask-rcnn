@@ -75,11 +75,10 @@ class TrainerHelper:
                 # calculate losses
                 rpn_cls_loss, rpn_bbox_loss = self.anchor_target_layer(rpn_cls_scores, rpn_bbox_deltas,gt_box, self.device)
                 # add gt classes to boxes
-                #cls_loss, bbox_loss = self.head_target_layer(rois, cls_scores, bbox_deltas, gt_box, gt_cls, self.device)
+                cls_loss, bbox_loss = self.head_target_layer(rois, cls_scores, bbox_deltas, gt_box, gt_cls, self.device)
                 print(f"  rpn_cls_loss: {rpn_cls_loss}, rpn_bbox_loss: {rpn_bbox_loss}")
-                #print(f"  head_cls_loss: {cls_loss}, bbox_loss: {bbox_loss}")
-                #loss = rpn_cls_loss + rpn_bbox_loss + cls_loss + bbox_loss
-                loss = rpn_cls_loss + rpn_bbox_loss
+                print(f"  head_cls_loss: {cls_loss}, bbox_loss: {bbox_loss}")
+                loss = rpn_cls_loss + rpn_bbox_loss + cls_loss + bbox_loss
                	loss.backward() 
                 optimizer.step()
             #anchor

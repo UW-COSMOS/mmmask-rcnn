@@ -87,6 +87,17 @@ class MMFasterRCNN(nn.Module):
         return rpn_cls_branch_scores, rpn_bbox_branch, rois, cls_preds, cls_scores, bbox_deltas
 
 
+    def set_weights(self,mean, std):
+        for parm in self.modules():
+            if not hasattr(parm, "weight"):
+                continue
+            w = parm.weight
+            # skip convolutional layers
+            if w.requires_grad:
+                nn.init.normal_(w, mean, std)
+
+                
+
 
 
 

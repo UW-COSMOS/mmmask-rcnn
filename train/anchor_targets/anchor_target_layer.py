@@ -6,7 +6,7 @@ Author: Josh McGrath
 import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss
-from .bbox_transform import bbox_overlaps
+from utils.bbox_overlaps import bbox_overlaps
 from utils.generate_anchors import generate_anchors
 from train.losses.smooth_l1_loss import SmoothL1Loss
 
@@ -28,12 +28,7 @@ def match(regions, gt_boxes, upper, lower, device):
     """
     # get ious for each predicted box and gt target
     # get back an NxM tensor of IOUs
-    print("regions shape",regions.shape)
-    print("gt boxes shape", gt_boxes.shape)
-    print("regions",regions)
-    print("gt_boxes", gt_boxes)
-    overlaps = bbox_overlaps(regions, gt_boxes)
-    print(overlaps.nonzero())
+    overlaps = bbox_overlaps(regions, gt_boxes, device)
     # now get best prediction for each
     best_score_pred, match_idxs_pred = torch.max(overlaps, dim=1)
     # mask for the boxes with
@@ -50,8 +45,6 @@ def match(regions, gt_boxes, upper, lower, device):
     # finally, for anything with max iou < lower add a negative value
     mask = best_score_pred < lower
     ret[mask] = NEGATIVE
-    print(ret)
-    exit()
     return ret
 
 
@@ -66,9 +59,7 @@ class AnchorTargetLayer(nn.Module):
         self.lower = lower
         self.bg_ratio = bg_ratio
         self.anchors = None
-
         self.cls_loss = BCEWithLogitsLoss(reduction="mean")
-
         self.bbox_loss = SmoothL1Loss(0.1)
 
     def forward(self, cls_scores, bbox_deltas, gt_boxes, device):
@@ -91,7 +82,7 @@ class AnchorTargetLayer(nn.Module):
         7) sample down the negative labels
         8) calculate losses
         """
-        # ensure center and original anchors have been precomputeds
+        # ensure center and original anchors have been precomputed
         if self.feat_stride is None:
             self.feat_stride = round(self.image_size / float(cls_scores.size(3)))
         if self.anchors is None:
@@ -101,7 +92,6 @@ class AnchorTargetLayer(nn.Module):
                                             self.scales).to(device)
 
         N, _, H, W = cls_scores.shape
-        batch_size = cls_scores.size(0)
         # TODO support batching
         cls_scores = cls_scores.permute(0,2, 3, 1)
         # apply bbox deltas but first reshape to (batch,H,W,4K)
@@ -111,20 +101,19 @@ class AnchorTargetLayer(nn.Module):
         _anchors = self.anchors.float()
         regions = _anchors + bbox_deltas
         # now we clip the boxes to the image
+        regions = regions.view(N, -1, 4, H, W).permute(0, 3, 4, 1, 2)
+        # reshape to [batch x L x 4]
+        regions = regions.reshape(N, -1, 4)
         regions = torch.clamp(regions, 0, self.image_size)
-        # now we can start matching
-        regions = regions.view(batch_size, -1, 4, H, W).permute(0, 3, 4, 1, 2)
-        # reshaped to [batch x L x 4]
-        regions = regions.reshape(batch_size, -1, 4)
         # we need anchors to be [L x 4]
         _anchors = _anchors.reshape(-1,4)
         #get matches/ losses per batch
-        cls_scores = cls_scores.reshape(batch_size, -1, 1)
+        cls_scores = cls_scores.reshape(N, -1, 1)
         # keeping full history is purposeful
-        tot_cls_loss = 0
-        tot_bbox_loss = 0
+        tot_cls_loss = 0.0 
+        tot_bbox_loss = 0.0
         for i in range(N):
-            matches = match(regions[i], gt_boxes[i][:, :4].squeeze(0), self.upper, self.lower, device)
+            matches = match(regions[i, :, :], gt_boxes[i][:, :4].squeeze(0), self.upper, self.lower, device)
             # filter out neither targets
             pos_mask = matches >= 0
             pos_inds = pos_mask.nonzero()
@@ -132,36 +121,25 @@ class AnchorTargetLayer(nn.Module):
             neg_inds = neg_mask.nonzero()
             # now we downsample the negative targets
             pos_inds = pos_inds.reshape(-1)
-            print("pos_inds ",pos_inds)
-            bg_num = torch.round(torch.tensor(pos_inds.size(0)*self.bg_ratio)).long()
+            bg_num = torch.round(torch.tensor(pos_inds.size(0)*self.bg_ratio)).long()+1
             perm = torch.randperm(neg_inds.size(0))
             sample_neg_inds = perm[:bg_num]
             gt_cls = torch.cat((torch.ones(pos_inds.size(0)), torch.zeros(sample_neg_inds.size(0)))).to(device)
             # grab cls_scores from each point
             pred_cls = torch.cat((cls_scores[i,pos_inds], cls_scores[i,sample_neg_inds])).to(device).squeeze()
-            ##print("cls_loss inputs ", pred_cls, gt_cls)
-            cls_loss = self.cls_loss(pred_cls, gt_cls)
-            ##print("cls_loss",cls_loss)
+            # TODO avoid this reshape edge case
+            gt_cls = gt_cls.reshape(-1)
+            pred_cls = pred_cls.reshape(-1)
+            cls_loss = self.cls_loss(pred_cls, gt_cls.reshape(-1))
             # we only do bbox regression on positive targets
             # get and reshape matches
             gt_indxs = matches[pos_inds].long()
-            sample_gt_bbox = gt_boxes[i][gt_indxs, :].reshape(-1,4)
+            sample_gt_bbox = gt_boxes[i][:,gt_indxs, :].reshape(-1,4)
             sample_pred_bbox = regions[i,pos_inds, :]
             sample_roi_bbox = _anchors[pos_inds, :]            
             norm = torch.tensor(N).float()
-            print("bbox inputs", sample_pred_bbox, sample_roi_bbox, sample_gt_bbox)
             bbox_loss = self.bbox_loss(sample_pred_bbox, sample_gt_bbox,sample_roi_bbox, norm)
             tot_cls_loss = tot_cls_loss + cls_loss
             tot_bbox_loss = tot_bbox_loss + bbox_loss
         return tot_cls_loss, tot_bbox_loss
-
-
-
-
-
-
-
-
-
-
 
