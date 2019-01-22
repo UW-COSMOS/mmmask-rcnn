@@ -34,11 +34,11 @@ class SmoothL1Loss(nn.Module):
         :return: [N] losses or if reduce is on, the mean of these losses
         """
         t_x = (out[ :, X] - roi[ :, X])/roi[ :, W]
-        t_y = (out[:, Y] - roi[:, Y])/roi[:, Y]
+        t_y = (out[:, Y] - roi[:, Y])/roi[:, H]
         t_w = torch.log(out[:, W]/roi[:,W])
         t_h = torch.log(out[:, H]/roi[:,H])
         gt_x = (gt[:, X] - roi[:, X])/roi[:, W]
-        gt_y = (gt[:, Y] - roi[:, Y])/roi[:, Y]
+        gt_y = (gt[:, Y] - roi[:, Y])/roi[:, H]
         gt_w = torch.log(gt[:, W]/roi[:, W])
         gt_h = torch.log(gt[:, H]/roi[:, H])
         t = torch.stack((t_x, t_y, t_h, t_w))
@@ -50,7 +50,6 @@ class SmoothL1Loss(nn.Module):
         signs_inv = (box_diff >= 1).detach().float()
         smooth_l1 = (torch.pow(box_diff,2) * 0.5 * signs) + ((box_diff - 0.5) * signs_inv)
         # sum along 3rd dim
-        smooth_l1 = smooth_l1.sum(2)
         smooth_l1 = smooth_l1.sum(1)
         smooth_l1 = smooth_l1.sum()/norm
         return self.lamb*smooth_l1
