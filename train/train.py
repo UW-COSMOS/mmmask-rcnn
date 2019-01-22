@@ -48,9 +48,9 @@ class TrainerHelper:
         self.params = params
         self.cls = dict([(val, idx) for (idx, val) in enumerate(model.cls_names)])
         self.device = device
-        self.anchor_target_layer = AnchorTargetLayer(model.scales, model.ratios,model.img_size).to(device)
-        self.head_target_layer = HeadTargetLayer(model.scales,
-                                                 model.ratios,
+        self.anchor_target_layer = AnchorTargetLayer(model.ratios, model.scales,model.img_size).to(device)
+        self.head_target_layer = HeadTargetLayer(model.ratios,
+                                                 model.scales,
                                                  model.img_size,
                                                  ncls=len(model.cls_names)).to(device)
 

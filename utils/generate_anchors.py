@@ -13,6 +13,8 @@ def generate_anchors(feat_stride, map_size, ratios, scales,output_centers=False)
     :param scales: the scales for each anchor
     :return: [K x H x W x x4] K being the number of anchors
     """
+    print(ratios)
+    print(scales)
     # first generate all center points [H x W x 2]
     center_pts = np.ones((map_size, map_size, 2))
     for i in range(map_size):
