@@ -28,20 +28,22 @@ class SmoothL1Loss(nn.Module):
         compute the smooth L1 loss for a set of gt boxes
         we assume all examples are to be counted in the loss
         (i.e) all background examples have been filtered out
-        :param out: the output of the network bbox_deltas [N x K x 4]
-        :param gt: the associated ground truth boxes for each box in out [N x K x 4]
+        :param out: the output of the network bbox_deltas [K x 4]
+        :param gt: the associated ground truth boxes for each box in out [K x 4]
         :param norm: normalization factor, usually the number of anchors
         :return: [N] losses or if reduce is on, the mean of these losses
         """
-        t_x = (out[:, :, X] - roi[:, :, X])/roi[:, :, W]
-        t_y = (out[:,:,Y] - roi[:, :, Y])/roi[:, :, Y]
-        t_w = torch.log(out[:, :, W]/roi[:, :,W])
-        t_h = torch.log(out[:, :, H]/roi[:, :,H])
-        gt_x = (out[:, :, X] - roi[:, :, X])/roi[:, :, W]
-        gt_y = (out[:,:,Y] - roi[:, :, Y])/roi[:, :, Y]
-        gt_w = torch.log(out[:, :, W]/roi[:, :,W])
-        gt_h = torch.log(out[:, :, H]/roi[:, :,H])
-
+        t_x = (out[ :, X] - roi[ :, X])/roi[ :, W]
+        t_y = (out[:, Y] - roi[:, Y])/roi[:, Y]
+        t_w = torch.log(out[:, W]/roi[:,W])
+        t_h = torch.log(out[:, H]/roi[:,H])
+        gt_x = (gt[:, X] - roi[:, X])/roi[:, W]
+        gt_y = (gt[:, Y] - roi[:, Y])/roi[:, Y]
+        gt_w = torch.log(gt[:, W]/roi[:, W])
+        gt_h = torch.log(gt[:, H]/roi[:, H])
+        t = torch.stack((t_x, t_y, t_h, t_w))
+        gt = torch.stack((gt_x, gt_y, gt_h, gt_w))
+        box_diff = t - gt
         box_diff = torch.abs(box_diff)
         # print(f"box_diff: {box_diff}")
         signs = (box_diff < 1).detach().float()
