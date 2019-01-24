@@ -3,3 +3,4 @@ pyyaml
 scikit-image
 bitmath
 tensorboardX
+tensorboard
