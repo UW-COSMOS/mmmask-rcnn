@@ -105,7 +105,8 @@ class AnchorTargetLayer(nn.Module):
         # reshape to [batch x L x 4]
         regions = regions.reshape(N, -1, 4)
         # filter the cross boundary images in training
-        regions = cross_boundary(regions, self.image_size, device)
+        for i in range(N):
+            regions[i, :, :] = cross_boundary(regions[i, :, :], self.image_size, device, remove=False)
         # we need anchors to be [L x 4]
         _anchors = _anchors.reshape(-1,4)
         #get matches/ losses per batch
@@ -121,11 +122,13 @@ class AnchorTargetLayer(nn.Module):
             neg_inds = neg_mask.nonzero()
             # sample 256 anchors
             pos_inds = pos_inds.reshape(-1)
-            npos = torch.min(pos_inds.size(0), 128)
-            pos_inds = torch.randperm(pos_inds.size(0))[:npos]
+            npos = min(pos_inds.size(0), 128)
+            pos_inds_perm = torch.randperm(pos_inds.size(0))[:npos]
+            pos_inds = pos_inds[pos_inds_perm]
             bg_num = self.sample_num - npos
             perm = torch.randperm(neg_inds.size(0))
             sample_neg_inds = perm[:bg_num]
+            sample_ned_inds = neg_inds[sample_neg_inds]
             gt_cls = torch.cat((torch.ones(pos_inds.size(0)), torch.zeros(sample_neg_inds.size(0)))).to(device)
             # grab cls_scores from each point
             pred_cls = torch.cat((cls_scores[i,pos_inds], cls_scores[i,sample_neg_inds])).to(device).squeeze()
@@ -136,7 +139,8 @@ class AnchorTargetLayer(nn.Module):
             # we only do bbox regression on positive targets
             # get and reshape matches
             gt_indxs = matches[pos_inds].long()
-            sample_gt_bbox = gt_boxes[i][:,gt_indxs, :].reshape(-1,4)
+            sample_gt_bbox = gt_boxes[i][:,gt_indxs, :]
+            sample_gt_bbox = sample_gt_bbox.reshape(-1,4)
             sample_pred_bbox = regions[i,pos_inds, :]
             sample_roi_bbox = _anchors[pos_inds, :]            
             norm = torch.tensor(N).float()
