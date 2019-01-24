@@ -67,13 +67,15 @@ class TrainerHelper:
         loader = DataLoader(self.dataset,
                             batch_size=self.params["BATCH_SIZE"],
                             collate_fn=partial(collate,cls_dict=self.cls),
-                            pin_memory=True)
+                            pin_memory=True,
+                            shuffle=True)
         batch_cls_loss = 0
         batch_bbox_loss = 0
-        batch_rpn_clss_loss = 0
+        batch_rpn_cls_loss = 0
         batch_rpn_bbox_loss = 0
-        for epoch in tqdm(range(self.params["EPOCHS"])):
-            for idx, batch in enumerate(loader):
+        iter = 0
+        for epoch in tqdm(range(self.params["EPOCHS"]),desc="epochs"):
+            for idx, batch in enumerate(tqdm(loader, desc="batches", leave=False)):
                 optimizer.zero_grad()
                 ex, gt_box, gt_cls = batch
                 ex = ex.to(self.device)
@@ -89,16 +91,17 @@ class TrainerHelper:
                 batch_cls_loss += float(cls_loss)
                 batch_bbox_loss += float(bbox_loss)
                 batch_rpn_bbox_loss += float(rpn_bbox_loss)
-                batch_cls_loss += float(rpn_cls_loss)
-                if idx % self.params["PRINT_PERIOD"]:
-                    self.output_batch_losses(batch_rpn_clss_loss,
+                batch_rpn_cls_loss += float(rpn_cls_loss)
+                if idx % self.params["PRINT_PERIOD"] == 0:
+                    self.output_batch_losses(batch_rpn_cls_loss,
                                              batch_rpn_bbox_loss,
                                              batch_cls_loss,
-                                             batch_bbox_loss)
+                                             batch_bbox_loss, iter)
                     batch_cls_loss = 0
                     batch_bbox_loss = 0
-                    batch_rpn_clss_loss = 0
+                    batch_rpn_cls_loss = 0
                     batch_rpn_bbox_loss = 0
+                    iter += 1
                 if self.scheduler.period == Scheduler.RPN:
                     loss = rpn_cls_loss + rpn_bbox_loss
                 elif self.scheduler.period  == Scheduler.CLASS_HEAD:
@@ -113,7 +116,7 @@ class TrainerHelper:
                 path = join(self.params["SAVE_DIR"], name)
                 torch.save(self.model.state_dict(), path)
 
-    def output_batch_losses(self, rpn_cls_loss, rpn_bbox_loss, cls_loss, bbox_loss):
+    def output_batch_losses(self, rpn_cls_loss, rpn_bbox_loss, cls_loss, bbox_loss, iter):
         """
         output either by priting or to tensorboard
         :param rpn_cls_loss:
@@ -122,16 +125,15 @@ class TrainerHelper:
         :param bbox_loss:
         :return:
         """
-        if self.param["USE_TENSORBOARD"]:
+        if self.params["USE_TENSORBOARD"]:
             self.writer.add_scalars('data/losses', {
                 "bbox_loss": bbox_loss,
                 "cls_loss": cls_loss,
                 "rpn_cls_loss": rpn_cls_loss,
                 "rpn_bbox_loss": rpn_bbox_loss
-            })
-        else:
-            print(f"  rpn_cls_loss: {rpn_cls_loss}, rpn_bbox_loss: {rpn_bbox_loss}")
-            print(f"  head_cls_loss: {cls_loss}, bbox_loss: {bbox_loss}")
+            },iter)
+        print(f"  rpn_cls_loss: {rpn_cls_loss}, rpn_bbox_loss: {rpn_bbox_loss}")
+        print(f"  head_cls_loss: {cls_loss}, bbox_loss: {bbox_loss}")
 
 
 def check_grad(model):
