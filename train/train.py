@@ -65,6 +65,7 @@ class TrainerHelper:
             for batch in loader:
                 # not currently supporting batching
                 optimizer.zero_grad()
+                old_weights = save_weights(self.model)
                 ex, gt_box, gt_cls = batch
                 ex = ex.to(self.device)
                 gt_box = gt_box
@@ -80,10 +81,35 @@ class TrainerHelper:
                 print(f"  head_cls_loss: {cls_loss}, bbox_loss: {bbox_loss}")
                 loss = rpn_cls_loss + rpn_bbox_loss + cls_loss + bbox_loss
                	loss.backward() 
+                print(check_grad(self.model))
                 optimizer.step()
+                new_weights = save_weights(self.model)
+                print(f"weights updated? {check_weight_update(old_weights, new_weights)}")
+
             #anchor
             if epoch % self.params["CHECKPOINT_PERIOD"] == 0:
                 name = f"model_{epoch}.pth"
                 path = join(self.params["SAVE_DIR"], name)
                 torch.save(self.model.state_dict(), path)
+
+def check_grad(model):
+    flag = False
+    for param in model.parameters():
+        if not(param.grad is None):
+            if not(param.grad.data.sum() == 0):
+                flag = True
+    return flag
+
+def save_weights(model):
+    save = {}
+    for key in model.state_dict():
+        save[key] = model.state_dict()[key].clone()
+    return save
+
+def check_weight_update(old, new):
+    flag = False
+    for key in old.keys():
+        if not (old[key] == new[key]).all():
+            flag = True
+    return flag
 
