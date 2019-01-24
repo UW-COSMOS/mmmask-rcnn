@@ -99,8 +99,8 @@ class ProposalLayer(nn.Module):
         for i in range(N):
             keep_idx = nms(regions[i, :,:], cls_scores[i,:], self.threshold)
             keep_idx = keep_idx[:self.NMS_POST]
-            output[i, :, 1:] = pad_tensor(regions[i, keep_idx, :], self.NMS_POST)
-            output[:, :, 0] = pad_tensor(cls_scores[i,keep_idx].squeeze(), self.NMS_POST)
+            output[i, :, 1:] = pad_tensor(regions[i, keep_idx, :], (self.NMS_POST,4))
+            output[:, :, 0] = pad_tensor(cls_scores[i,keep_idx].unsqueeze(1), (self.NMS_POST,1)).squeeze()
         return output
 
     def backward(self, ctx, grad_output):
@@ -109,6 +109,6 @@ class ProposalLayer(nn.Module):
 
 def pad_tensor(tens, size):
     ret = torch.zeros(size)
-    ret[tens.size(0)] = tens
+    ret[:tens.size(0),:] = tens
     return ret
 

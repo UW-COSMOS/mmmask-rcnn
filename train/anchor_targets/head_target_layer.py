@@ -122,12 +122,12 @@ class HeadTargetLayer(nn.Module):
             gt_labels = torch.cat((pos_labels, neg_labels))
             pred_scores = torch.cat((cls_scores[idx,pos_inds, :], cls_scores[idx,sample_neg_inds, :]))
             l = self.cls_loss(pred_scores, gt_labels)
-            cls_loss += l 
+            cls_loss = l + cls_loss 
             # now we can compute the bbox loss
             sample_pred_bbox = pred_batch[pos_inds, :]
             sample_roi_bbox = rois[idx, pos_inds, :]
             gt_bbox = gt_box[gt_indxs, :]
             gt_bbox = gt_bbox.reshape(-1,4)
             # no normalization happens at the head
-            bbox_loss += self.bbox_loss(sample_pred_bbox, gt_bbox,sample_roi_bbox, N)
+            bbox_loss = bbox_loss + self.bbox_loss(sample_pred_bbox, gt_bbox,sample_roi_bbox, N)
         return cls_loss, bbox_loss

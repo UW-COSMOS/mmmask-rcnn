@@ -12,6 +12,7 @@ def absolute_coords(bboxes, device):
     :param bboxes:
     :return:
     """
+    bboxes = bboxes.clone()
     L, _ = bboxes.shape
     coords_bbox = torch.ones(L, 4).to(device)
     coords_bbox[:, X] = bboxes[:, X] - bboxes[:, W] / 2
@@ -26,8 +27,9 @@ def centers_size(bbox_coords, device):
     :param bboxes: [L x (X1, Y1, X2, Y2)]
     :return: [L x (X, Y, H, W)]
     """
+    bbox_coords = bbox_coords.clone()
     L, _ = bbox_coords.shape
-    bboxes = torch.tensor(L, 4)
+    bboxes = torch.ones(L, 4)
     bboxes[:, X] = (bbox_coords[:, X] + bbox_coords[:, X2])/2.0
     bboxes[:, Y] = (bbox_coords[:, Y] + bbox_coords[:, Y2])/2.0
     bboxes[:, W] = (bbox_coords[:, X2] - bbox_coords[:, X])

@@ -67,14 +67,12 @@ class TrainerHelper:
                             pin_memory=True)
         for epoch in tqdm(range(self.params["EPOCHS"])):
             for idx, batch in enumerate(loader):
-
-                # not currently supporting batching
                 optimizer.zero_grad()
                 ex, gt_box, gt_cls = batch
                 ex = ex.to(self.device)
                 gt_box = gt_box
                 gt_cls = [gt.to(self.device) for gt in gt_cls]
-                gt_box = [gt.reshape(1, -1,4).float().to(self.device) for gt in gt_box]
+                gt_box = [gt.reshape(1, -1, 4).float().to(self.device) for gt in gt_box]
                 # forward pass
                 rpn_cls_scores, rpn_bbox_deltas, rois, cls_preds, cls_scores, bbox_deltas = self.model(ex, self.device)
                 # calculate losses
@@ -91,8 +89,30 @@ class TrainerHelper:
                     loss = rpn_cls_loss + rpn_bbox_loss + cls_loss + bbox_loss
                 loss.backward()
                 optimizer.step()
+                self.scheduler.step()
             if epoch % self.params["CHECKPOINT_PERIOD"] == 0:
                 name = f"model_{epoch}.pth"
                 path = join(self.params["SAVE_DIR"], name)
                 torch.save(self.model.state_dict(), path)
+
+def check_grad(model):
+    flag = False
+    for param in model.parameters():
+        if not(param.grad is None):
+            if not(param.grad.data.sum() == 0):
+                flag = True
+    return flag
+
+def save_weights(model):
+    save = {}
+    for key in model.state_dict():
+        save[key] = model.state_dict()[key].clone()
+    return save
+
+def check_weight_update(old, new):
+    flag = False
+    for key in old.keys():
+        if not (old[key] == new[key]).all():
+            flag = True
+    return flag
 
