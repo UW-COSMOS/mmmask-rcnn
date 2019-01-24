@@ -9,6 +9,7 @@ from torch.nn import BCEWithLogitsLoss
 from utils.bbox_overlaps import bbox_overlaps
 from utils.generate_anchors import generate_anchors
 from train.losses.smooth_l1_loss import SmoothL1Loss
+from utils.boundary_utils import cross_boundary
 
 NEITHER = -1
 NEGATIVE = -2
@@ -49,7 +50,7 @@ def match(regions, gt_boxes, upper, lower, device):
 
 
 class AnchorTargetLayer(nn.Module):
-    def __init__(self, ratios, scales, image_size=1920, upper=0.4, lower=0.1, bg_ratio=1.0):
+    def __init__(self, ratios, scales, image_size=1920, upper=0.4, lower=0.1, sample_num=256):
         super(AnchorTargetLayer, self).__init__()
         self.feat_stride = None
         self.ratios = ratios
@@ -57,7 +58,7 @@ class AnchorTargetLayer(nn.Module):
         self.image_size = image_size
         self.upper = upper
         self.lower = lower
-        self.bg_ratio = bg_ratio
+        self.sample_num = sample_num
         self.anchors = None
         self.cls_loss = BCEWithLogitsLoss(reduction="mean")
         self.bbox_loss = SmoothL1Loss(0.1)
@@ -92,7 +93,6 @@ class AnchorTargetLayer(nn.Module):
                                             self.scales).to(device)
 
         N, _, H, W = cls_scores.shape
-        # TODO support batching
         cls_scores = cls_scores.permute(0,2, 3, 1)
         # apply bbox deltas but first reshape to (batch,H,W,4K)
         bbox_deltas = bbox_deltas.permute(0, 2, 3, 1)
@@ -104,13 +104,13 @@ class AnchorTargetLayer(nn.Module):
         regions = regions.view(N, -1, 4, H, W).permute(0, 3, 4, 1, 2)
         # reshape to [batch x L x 4]
         regions = regions.reshape(N, -1, 4)
-        regions = torch.clamp(regions, 0, self.image_size)
+        # filter the cross boundary images in training
+        regions = cross_boundary(regions, self.image_size, device)
         # we need anchors to be [L x 4]
         _anchors = _anchors.reshape(-1,4)
         #get matches/ losses per batch
         cls_scores = cls_scores.reshape(N, -1, 1)
-        # keeping full history is purposeful
-        tot_cls_loss = 0.0 
+        tot_cls_loss = 0.0
         tot_bbox_loss = 0.0
         for i in range(N):
             matches = match(regions[i, :, :], gt_boxes[i][:, :4].squeeze(0), self.upper, self.lower, device)
@@ -119,9 +119,11 @@ class AnchorTargetLayer(nn.Module):
             pos_inds = pos_mask.nonzero()
             neg_mask = matches == NEGATIVE
             neg_inds = neg_mask.nonzero()
-            # now we downsample the negative targets
+            # sample 256 anchors
             pos_inds = pos_inds.reshape(-1)
-            bg_num = torch.round(torch.tensor(pos_inds.size(0)*self.bg_ratio)).long()+1
+            npos = torch.min(pos_inds.size(0), 128)
+            pos_inds = torch.randperm(pos_inds.size(0))[:npos]
+            bg_num = self.sample_num - npos
             perm = torch.randperm(neg_inds.size(0))
             sample_neg_inds = perm[:bg_num]
             gt_cls = torch.cat((torch.ones(pos_inds.size(0)), torch.zeros(sample_neg_inds.size(0)))).to(device)

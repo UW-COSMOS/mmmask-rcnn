@@ -3,6 +3,7 @@ compute the overlap matrix
 Author: Josh McGrath
 """
 import torch
+from utils.boundary_utils import absolute_coords
 X = 0
 Y = 1
 H = 2
@@ -19,17 +20,9 @@ def get_iou(bboxes, gt_box, device):
     L, _ = bboxes.shape
     gt_box = gt_box.expand(L, 4)
     # convert to x1, y1, x2, y2
-    coords_bbox = torch.ones(L, 4).to(device)
-    coords_bbox[:, X] = bboxes[:, X] - bboxes[:, W] / 2
-    coords_bbox[:, Y] = bboxes[:, Y] - bboxes[:, H] / 2
-    coords_bbox[:, X2] = bboxes[:, X] + bboxes[:, W] / 2
-    coords_bbox[:, Y2] = bboxes[:, Y] + bboxes[:, H] / 2
+    coords_bbox = absolute_coords(bboxes, device)
     # do the same for the ground truth
-    coords_gt = torch.ones(L, 4).to(device)
-    coords_gt[:, X] = gt_box[:, X] - gt_box[:, W] / 2
-    coords_gt[:, Y] = gt_box[:, Y] - gt_box[:, H] / 2
-    coords_gt[:, X2] = gt_box[:, X] + gt_box[:, W] / 2
-    coords_gt[:, Y2] = gt_box[:, Y] + gt_box[:, H] / 2
+    coords_gt = absolute_coords(gt_box, device)
     # now use this to compute the aligned IoU
     i_boxes = torch.ones(L, 4).to(device)
     i_boxes[:, X] = torch.max(coords_bbox[:, X], coords_gt[:, X])
