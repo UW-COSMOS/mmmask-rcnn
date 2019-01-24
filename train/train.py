@@ -12,6 +12,7 @@ from train.anchor_targets.anchor_target_layer import AnchorTargetLayer
 from train.anchor_targets.head_target_layer import HeadTargetLayer
 from functools import partial
 import bitmath
+from .scheduler import Scheduler
 
 
 def unpack_cls(cls_dict, gt_list):
@@ -48,6 +49,7 @@ class TrainerHelper:
         self.params = params
         self.cls = dict([(val, idx) for (idx, val) in enumerate(model.cls_names)])
         self.device = device
+        self.scheduler = Scheduler(self.params["SWITCH_PERIOD"])
         self.anchor_target_layer = AnchorTargetLayer(model.ratios, model.scales,model.img_size).to(device)
         self.head_target_layer = HeadTargetLayer(model.ratios,
                                                  model.scales,
@@ -64,7 +66,8 @@ class TrainerHelper:
                             collate_fn=partial(collate,cls_dict=self.cls),
                             pin_memory=True)
         for epoch in tqdm(range(self.params["EPOCHS"])):
-            for batch in loader:
+            for idx, batch in enumerate(loader):
+
                 # not currently supporting batching
                 optimizer.zero_grad()
                 ex, gt_box, gt_cls = batch
@@ -80,10 +83,14 @@ class TrainerHelper:
                 cls_loss, bbox_loss = self.head_target_layer(rois, cls_scores, bbox_deltas, gt_box, gt_cls, self.device)
                 print(f"  rpn_cls_loss: {rpn_cls_loss}, rpn_bbox_loss: {rpn_bbox_loss}")
                 print(f"  head_cls_loss: {cls_loss}, bbox_loss: {bbox_loss}")
-                loss = rpn_cls_loss + rpn_bbox_loss + cls_loss + bbox_loss
-               	loss.backward() 
+                if self.scheduler.period == Scheduler.RPN:
+                    loss = rpn_cls_loss + rpn_bbox_loss
+                elif self.scheduler.period  == Scheduler.CLASS_HEAD:
+                    loss = cls_loss + bbox_loss
+                else:
+                    loss = rpn_cls_loss + rpn_bbox_loss + cls_loss + bbox_loss
+                loss.backward()
                 optimizer.step()
-            #anchor
             if epoch % self.params["CHECKPOINT_PERIOD"] == 0:
                 name = f"model_{epoch}.pth"
                 path = join(self.params["SAVE_DIR"], name)
