@@ -4,4 +4,7 @@ services:
         build: .
         runtime: nvidia
         ipc: host
+        volumes:
+            - .:/vol/
+
 
