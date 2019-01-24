@@ -56,7 +56,9 @@ class TrainerHelper:
 
 
     def train(self):
-        optimizer = optim.SGD(self.model.parameters(), lr=self.params["LEARNING_RATE"],weight_decay=self.params["WEIGHT_DECAY"])
+        optimizer = optim.SGD(self.model.parameters(), lr=self.params["LEARNING_RATE"],
+                              weight_decay=self.params["WEIGHT_DECAY"],
+                              momentum=0.9)
         loader = DataLoader(self.dataset,
                             batch_size=self.params["BATCH_SIZE"],
                             collate_fn=partial(collate,cls_dict=self.cls),

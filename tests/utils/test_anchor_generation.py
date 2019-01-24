@@ -23,9 +23,11 @@ for x,y in centers.astype(int):
 i,j = 6,6
 for idx in range(9):
     x, y, h, w = anchors[i, j, idx]
-    x2 = x + w
-    y2 = y + h
-    draw.rectangle((x, y, x2, y2), outline="#00f")
+    x1 = x - w/2
+    y1 = y - h/2
+    x2 = x + w/2
+    y2 = y + h/2
+    draw.rectangle((x1, y1, x2, y2), outline="#00f")
 base_image.save("out.png", "PNG")
 
 

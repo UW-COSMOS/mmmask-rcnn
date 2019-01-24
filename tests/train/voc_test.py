@@ -8,7 +8,7 @@ from train.data_layer.xml_loader import XMLLoader
 from train.train import TrainerHelper
 import yaml
 import torch
-from  argparse import ArgumentParser
+from argparse import ArgumentParser
 
 parser = ArgumentParser(description="run on a PASCAL VOC dataset")
 parser.add_argument('img_path', type=str)

@@ -7,8 +7,8 @@ import torch
 
 X = 0
 Y = 1
-W = 2
-H = 3
+H = 2
+W = 3
 
 class SmoothL1Loss(nn.Module):
     def __init__(self, lamb, reduce=False):

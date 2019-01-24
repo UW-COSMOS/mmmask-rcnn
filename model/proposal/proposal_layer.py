@@ -8,7 +8,7 @@ import torch
 from torch import nn
 from model.nms.nms import nms
 from utils.generate_anchors import generate_anchors
-
+from utils.boundary_utils import cross_boundary
 
 def filter_regions(regions, min_size):
     """
@@ -74,33 +74,41 @@ class ProposalLayer(nn.Module):
         _anchors = self.anchors.float()
         regions = _anchors + bbox_deltas
         # now we clip the boxes to the image
-        regions = torch.clamp(regions, 0, self.image_size)
-        # TODO filter any boxes which are too small
+
         # now we can grab the pre NMS regions
         # first we reshape the tensors to be N x K, N x K x 4
         cls_scores = cls_scores.permute(0, 3, 1, 2).reshape(N, -1)
         regions = regions.view(N, -1, 4, H, W).permute(0, 3, 4, 1, 2)
-        regions = regions.reshape(N, -1, 4)
+        regions = regions.reshape(N,-1, 4)
+        for i in range(N):
+            regions[i, :, :] = cross_boundary(regions[i, :, :], self.image_size, device, remove=False)
         pre_nms = min(self.NMS_PRE, cls_scores.size(1))
         _, sort_order = cls_scores.topk(pre_nms, dim=1)
         slices_scores = []
         slices_regions = []
         for i in range(N):
             slice_idxs = sort_order[i,:]
-            slice_score  = cls_scores[i, slice_idxs]
+            slice_score = cls_scores[i, slice_idxs]
             slice_region = regions[i, slice_idxs, :]
             slices_regions.append(slice_region)
             slices_scores.append(slice_score)
         cls_scores = torch.stack(slices_scores, dim=0)
         regions = torch.stack(slices_regions, dim=0)
         output = cls_scores.new(N, self.NMS_POST, 5)
+        # TODO implement padding here
         for i in range(N):
             keep_idx = nms(regions[i, :,:], cls_scores[i,:], self.threshold)
             keep_idx = keep_idx[:self.NMS_POST]
-            output[i, :, 1:] = regions[i, keep_idx, :]
-            output[:, :, 0] = cls_scores[i,keep_idx].squeeze()
+            output[i, :, 1:] = pad_tensor(regions[i, keep_idx, :], self.NMS_POST)
+            output[:, :, 0] = pad_tensor(cls_scores[i,keep_idx].squeeze(), self.NMS_POST)
         return output
 
     def backward(self, ctx, grad_output):
         pass
+
+
+def pad_tensor(tens, size):
+    ret = torch.zeros(size)
+    ret[tens.size(0)] = tens
+    return ret
 
