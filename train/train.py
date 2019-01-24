@@ -13,6 +13,7 @@ from train.anchor_targets.head_target_layer import HeadTargetLayer
 from functools import partial
 import bitmath
 from .scheduler import Scheduler
+from tensorboardX import SummaryWriter
 
 
 def unpack_cls(cls_dict, gt_list):
@@ -49,6 +50,8 @@ class TrainerHelper:
         self.params = params
         self.cls = dict([(val, idx) for (idx, val) in enumerate(model.cls_names)])
         self.device = device
+        if params["USE_TENSORBOARD"]:
+            self.writer = SummaryWriter()
         self.scheduler = Scheduler(self.params["SWITCH_PERIOD"])
         self.anchor_target_layer = AnchorTargetLayer(model.ratios, model.scales,model.img_size).to(device)
         self.head_target_layer = HeadTargetLayer(model.ratios,
@@ -65,6 +68,10 @@ class TrainerHelper:
                             batch_size=self.params["BATCH_SIZE"],
                             collate_fn=partial(collate,cls_dict=self.cls),
                             pin_memory=True)
+        batch_cls_loss = 0
+        batch_bbox_loss = 0
+        batch_rpn_clss_loss = 0
+        batch_rpn_bbox_loss = 0
         for epoch in tqdm(range(self.params["EPOCHS"])):
             for idx, batch in enumerate(loader):
                 optimizer.zero_grad()
@@ -77,10 +84,21 @@ class TrainerHelper:
                 rpn_cls_scores, rpn_bbox_deltas, rois, cls_preds, cls_scores, bbox_deltas = self.model(ex, self.device)
                 # calculate losses
                 rpn_cls_loss, rpn_bbox_loss = self.anchor_target_layer(rpn_cls_scores, rpn_bbox_deltas,gt_box, self.device)
-                # add gt classes to boxes
                 cls_loss, bbox_loss = self.head_target_layer(rois, cls_scores, bbox_deltas, gt_box, gt_cls, self.device)
-                print(f"  rpn_cls_loss: {rpn_cls_loss}, rpn_bbox_loss: {rpn_bbox_loss}")
-                print(f"  head_cls_loss: {cls_loss}, bbox_loss: {bbox_loss}")
+                # update batch losses, cast as float so we don't keep gradient history
+                batch_cls_loss += float(cls_loss)
+                batch_bbox_loss += float(bbox_loss)
+                batch_rpn_bbox_loss += float(rpn_bbox_loss)
+                batch_cls_loss += float(rpn_cls_loss)
+                if idx % self.params["PRINT_PERIOD"]:
+                    self.output_batch_losses(batch_rpn_clss_loss,
+                                             batch_rpn_bbox_loss,
+                                             batch_cls_loss,
+                                             batch_bbox_loss)
+                    batch_cls_loss = 0
+                    batch_bbox_loss = 0
+                    batch_rpn_clss_loss = 0
+                    batch_rpn_bbox_loss = 0
                 if self.scheduler.period == Scheduler.RPN:
                     loss = rpn_cls_loss + rpn_bbox_loss
                 elif self.scheduler.period  == Scheduler.CLASS_HEAD:
@@ -95,6 +113,27 @@ class TrainerHelper:
                 path = join(self.params["SAVE_DIR"], name)
                 torch.save(self.model.state_dict(), path)
 
+    def output_batch_losses(self, rpn_cls_loss, rpn_bbox_loss, cls_loss, bbox_loss):
+        """
+        output either by priting or to tensorboard
+        :param rpn_cls_loss:
+        :param rpn_bbox_loss:
+        :param cls_loss:
+        :param bbox_loss:
+        :return:
+        """
+        if self.param["USE_TENSORBOARD"]:
+            self.writer.add_scalars('data/losses', {
+                "bbox_loss": bbox_loss,
+                "cls_loss": cls_loss,
+                "rpn_cls_loss": rpn_cls_loss,
+                "rpn_bbox_loss": rpn_bbox_loss
+            })
+        else:
+            print(f"  rpn_cls_loss: {rpn_cls_loss}, rpn_bbox_loss: {rpn_bbox_loss}")
+            print(f"  head_cls_loss: {cls_loss}, bbox_loss: {bbox_loss}")
+
+
 def check_grad(model):
     flag = False
     for param in model.parameters():
@@ -103,11 +142,13 @@ def check_grad(model):
                 flag = True
     return flag
 
+
 def save_weights(model):
     save = {}
     for key in model.state_dict():
         save[key] = model.state_dict()[key].clone()
     return save
+
 
 def check_weight_update(old, new):
     flag = False
@@ -115,4 +156,3 @@ def check_weight_update(old, new):
         if not (old[key] == new[key]).all():
             flag = True
     return flag
-
