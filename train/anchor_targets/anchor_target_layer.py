@@ -113,6 +113,8 @@ class AnchorTargetLayer(nn.Module):
         cls_scores = cls_scores.reshape(N, -1, 1)
         tot_cls_loss = 0.0
         tot_bbox_loss = 0.0
+        tot_fg = 0.0
+        tot_bg = 0.0
         for i in range(N):
             matches = match(regions[i, :, :], gt_boxes[i][:, :4].squeeze(0), self.upper, self.lower, device)
             # filter out neither targets
@@ -136,6 +138,9 @@ class AnchorTargetLayer(nn.Module):
             gt_cls = gt_cls.reshape(-1)
             pred_cls = pred_cls.reshape(-1)
             cls_loss = self.cls_loss(pred_cls, gt_cls.reshape(-1))
+            if cls_loss != cls_loss:
+                print(f"pred_cls: {pred_cls}")
+                print(f"gt_cls: {gt_cls}")
             # we only do bbox regression on positive targets
             # get and reshape matches
             gt_indxs = matches[pos_inds].long()
@@ -147,5 +152,7 @@ class AnchorTargetLayer(nn.Module):
             bbox_loss = self.bbox_loss(sample_pred_bbox, sample_gt_bbox,sample_roi_bbox, norm)
             tot_cls_loss = tot_cls_loss + cls_loss
             tot_bbox_loss = tot_bbox_loss + bbox_loss
-        return tot_cls_loss, tot_bbox_loss
+            tot_fg += npos
+            tot_bg += bg_num
+        return tot_cls_loss, tot_bbox_loss, tot_bg, tot_fg, pred_cls.mean()
 

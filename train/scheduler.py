@@ -15,7 +15,7 @@ class Scheduler:
         :param switch_period:
         """
         self.switch_period = switch_period
-        self.period = 0
+        self.period = self.JOINT
 
     def step(self):
         if not self.period == self.JOINT:

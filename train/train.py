@@ -4,6 +4,7 @@ Takes a model, dataset, and training paramters
 as arguments
 """
 import torch
+from  torch import nn
 from os.path import join
 from torch import optim
 from torch.utils.data import DataLoader
@@ -61,9 +62,8 @@ class TrainerHelper:
 
 
     def train(self):
-        optimizer = optim.SGD(self.model.parameters(), lr=self.params["LEARNING_RATE"],
-                              weight_decay=self.params["WEIGHT_DECAY"],
-                              momentum=0.9)
+        optimizer = optim.Adam(self.model.parameters(), lr=self.params["LEARNING_RATE"],
+                              weight_decay=self.params["WEIGHT_DECAY"])
         loader = DataLoader(self.dataset,
                             batch_size=self.params["BATCH_SIZE"],
                             collate_fn=partial(collate,cls_dict=self.cls),
@@ -73,6 +73,9 @@ class TrainerHelper:
         batch_bbox_loss = 0
         batch_rpn_cls_loss = 0
         batch_rpn_bbox_loss = 0
+        batch_fg = 0
+        batch_bg = 0
+        rpn_pred = 0
         iter = 0
         for epoch in tqdm(range(self.params["EPOCHS"]),desc="epochs"):
             for idx, batch in enumerate(tqdm(loader, desc="batches", leave=False)):
@@ -85,22 +88,33 @@ class TrainerHelper:
                 # forward pass
                 rpn_cls_scores, rpn_bbox_deltas, rois, cls_preds, cls_scores, bbox_deltas = self.model(ex, self.device)
                 # calculate losses
-                rpn_cls_loss, rpn_bbox_loss = self.anchor_target_layer(rpn_cls_scores, rpn_bbox_deltas,gt_box, self.device)
+                rpn_cls_loss, rpn_bbox_loss, bg_num, fg_num, avg_pred  = self.anchor_target_layer(rpn_cls_scores, rpn_bbox_deltas,gt_box, self.device)
                 cls_loss, bbox_loss = self.head_target_layer(rois, cls_scores, bbox_deltas, gt_box, gt_cls, self.device)
+                if rpn_cls_loss != rpn_cls_loss:
+                    raise Exception("got nan class loss")
                 # update batch losses, cast as float so we don't keep gradient history
                 batch_cls_loss += float(cls_loss)
                 batch_bbox_loss += float(bbox_loss)
                 batch_rpn_bbox_loss += float(rpn_bbox_loss)
                 batch_rpn_cls_loss += float(rpn_cls_loss)
+                batch_bg += bg_num
+                batch_fg += fg_num
+                rpn_pred += avg_pred/self.params["PRINT_PERIOD"]
                 if idx % self.params["PRINT_PERIOD"] == 0:
                     self.output_batch_losses(batch_rpn_cls_loss,
                                              batch_rpn_bbox_loss,
                                              batch_cls_loss,
-                                             batch_bbox_loss, iter)
+                                             batch_bbox_loss,
+                                             iter, 
+                                             float(batch_fg)/batch_bg,
+                                             rpn_pred)
                     batch_cls_loss = 0
                     batch_bbox_loss = 0
                     batch_rpn_cls_loss = 0
                     batch_rpn_bbox_loss = 0
+                    batch_bg = 0
+                    batch_fg = 0
+                    rpn_pred = 0
                     iter += 1
                 if self.scheduler.period == Scheduler.RPN:
                     loss = rpn_cls_loss + rpn_bbox_loss
@@ -109,6 +123,7 @@ class TrainerHelper:
                 else:
                     loss = rpn_cls_loss + rpn_bbox_loss + cls_loss + bbox_loss
                 loss.backward()
+                nn.utils.clip_grad_value_(self.model.parameters(), 9)
                 optimizer.step()
                 self.scheduler.step()
             if epoch % self.params["CHECKPOINT_PERIOD"] == 0:
@@ -116,7 +131,7 @@ class TrainerHelper:
                 path = join(self.params["SAVE_DIR"], name)
                 torch.save(self.model.state_dict(), path)
 
-    def output_batch_losses(self, rpn_cls_loss, rpn_bbox_loss, cls_loss, bbox_loss, iter):
+    def output_batch_losses(self, rpn_cls_loss, rpn_bbox_loss, cls_loss, bbox_loss, iter, bg_ratio,rpn_pred):
         """
         output either by priting or to tensorboard
         :param rpn_cls_loss:
@@ -126,12 +141,16 @@ class TrainerHelper:
         :return:
         """
         if self.params["USE_TENSORBOARD"]:
-            self.writer.add_scalars('data/losses', {
+            vals = {
                 "bbox_loss": bbox_loss,
                 "cls_loss": cls_loss,
                 "rpn_cls_loss": rpn_cls_loss,
-                "rpn_bbox_loss": rpn_bbox_loss
-            },iter)
+                "rpn_bbox_loss": rpn_bbox_loss,
+                "fg_bg_ratio": bg_ratio,
+                "avg_rpn_pred": rpn_pred
+            }
+            for key in vals:
+                self.writer.add_scalar(key, vals[key], iter)
         print(f"  rpn_cls_loss: {rpn_cls_loss}, rpn_bbox_loss: {rpn_bbox_loss}")
         print(f"  head_cls_loss: {cls_loss}, bbox_loss: {bbox_loss}")
 
