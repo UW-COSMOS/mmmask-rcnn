@@ -2,9 +2,11 @@
 Connected components algorithm for region proposal
 """
 
+import multiprocessing as mp
 import torch
-from PIL import Image
+from PIL import Image, ImageFilter
 import numpy as np
+np.set_printoptions(threshold=np.nan)
 from skimage import io
 from torchvision.transforms import ToTensor, ToPILImage
 from timeit import default_timer as timer
@@ -12,13 +14,16 @@ import math
 import numbers
 from torch import nn
 from torch.nn import functional as F
+import matplotlib.pyplot as plt
+import os
+from model.nms.nms import nms
 
 
 
 def convert_image_to_binary_map(img):
     """
     :param img: [3 x H x W ] tensor
-    :return: 
+    :return: [H x W] binary tensor
     """
     if img.type() != torch.float:
         img = img.float()
@@ -118,7 +123,9 @@ class GaussianSmoothing(nn.Module):
         return self.conv(input, weight=self.weight, groups=self.groups)
 
 # TODO: Can clean this up. Some redundancy here
-def get_components(bmap):
+def get_components(bmap, numpy=False):
+    if numpy:
+        bmap = torch.from_numpy(bmap)
     label_map = np.zeros(bmap.shape)
     current_label = 1
     label_dict = {}
@@ -328,21 +335,13 @@ def grid_proposal(img, recurse_depth=4):
         row_crop_imgs.append()
 
 
-def get_proposals(img, verbose=False, min_area=0, use_blur=True, output_blur=False):
+def get_proposals(img, verbose=False, min_area=0):
     """
     Get the proposals from the img tensors
     :param img: [N x 3 x HEIGHT x WIDTH] tensor
     :param min_area: minimum area of a connected component to consider
     :return: [N x M x 4], where M is the index of the connected component proposal
     """
-    # First we blur to get better connected components
-    smooth = GaussianSmoothing(3, 10, 20)
-    if use_blur:
-        img = smooth(img)
-    if output_blur:
-        pil_t = ToPILImage()
-        im = pil_t(img[0])
-        im.save('blur_output.png')
     cc_list = []
     for i in img:
         start_bmap = timer()
@@ -354,7 +353,8 @@ def get_proposals(img, verbose=False, min_area=0, use_blur=True, output_blur=Fal
         components_set = set()
         start_cross = timer()
         for ind, component in enumerate(components):
-            for next_component in components[ind+1:]:
+            # Note that we do want to consider (c1, c1) pairs
+            for next_component in components[ind:]:
                 tl_x1, tl_y1, br_x1, br_y1 = component
                 tl_x2, tl_y2, br_x2, br_y2 = next_component
                 # Lets pretend the max/min functions don't exist, shhhhhhh
@@ -369,11 +369,11 @@ def get_proposals(img, verbose=False, min_area=0, use_blur=True, output_blur=Fal
         components_list = [list(x) for x in components_list]
         cc_list.append(components_list)
         end_cross = timer()
-    if verbose:
-        print('get_proposal Timers\n------')
-        print(f'Image to binary map: {end_bmap - start_bmap} s')
-        print(f'Get components: {end_cmp - start_cmp} s')
-        print(f'Cross components: {end_cross - start_cross} s')
+        if verbose:
+            print('get_proposal Timers\n------')
+            print(f'Image to binary map: {end_bmap - start_bmap} s')
+            print(f'Get components: {end_cmp - start_cmp} s')
+            print(f'Cross components: {end_cross - start_cross} s')
 
     np_cc = np.array(cc_list, dtype='int32')
     return torch.from_numpy(np_cc)
@@ -404,21 +404,468 @@ def test_get_proposals():
         if ee not in p:
             raise Exception('Test 3 test_get_proposals failed')
 
+#https://www.pyimagesearch.com/2015/02/16/faster-non-maximum-suppression-python/
+# Malisiewicz et al.
+def non_max_suppression_fast(boxes, overlapThresh):
+    # if there are no boxes, return an empty list
+    if len(boxes) == 0:
+        return []
+ 
+    # if the bounding boxes integers, convert them to floats --
+    # this is important since we'll be doing a bunch of divisions
+    if boxes.dtype.kind == "i":
+        boxes = boxes.astype("float")
+ 
+    # initialize the list of picked indexes    
+    pick = []
+ 
+    # grab the coordinates of the bounding boxes
+    x1 = boxes[:,0]
+    y1 = boxes[:,1]
+    x2 = boxes[:,2]
+    y2 = boxes[:,3]
+ 
+    # compute the area of the bounding boxes and sort the bounding
+    # boxes by the bottom-right y-coordinate of the bounding box
+    area = (x2 - x1 + 1) * (y2 - y1 + 1)
+    idxs = np.argsort(y2)
+ 
+    # keep looping while some indexes still remain in the indexes
+    # list
+    while len(idxs) > 0:
+        # grab the last index in the indexes list and add the
+        # index value to the list of picked indexes
+        last = len(idxs) - 1
+        i = idxs[last]
+        pick.append(i)
+ 
+        # find the largest (x, y) coordinates for the start of
+        # the bounding box and the smallest (x, y) coordinates
+        # for the end of the bounding box
+        xx1 = np.maximum(x1[i], x1[idxs[:last]])
+        yy1 = np.maximum(y1[i], y1[idxs[:last]])
+        xx2 = np.minimum(x2[i], x2[idxs[:last]])
+        yy2 = np.minimum(y2[i], y2[idxs[:last]])
+ 
+        # compute the width and height of the bounding box
+        w = np.maximum(0, xx2 - xx1 + 1)
+        h = np.maximum(0, yy2 - yy1 + 1)
+ 
+        # compute the ratio of overlap
+        overlap = (w * h) / area[idxs[:last]]
+ 
+        # delete all indexes from the index list that have
+        idxs = np.delete(idxs, np.concatenate(([last],
+            np.where(overlap > overlapThresh)[0])))
+ 
+    # return only the bounding boxes that were picked using the
+    # integer data type
+    return boxes[pick].astype("int")
+
+def write_proposals(img_p, output_dir='cc_proposals'):
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+    img = Image.open(img_p)
+    thresh = 245
+    fn = lambda x : 0 if x > thresh else 255
+    img_np = np.array(img.convert('RGB'))
+    bmap_np = np.array(img.convert('L').point(fn, mode='1')).astype(np.uint8)
+    img_height = bmap_np.shape[0]
+    zero_col = np.zeros(img_height)
+    left_w, right_w = 0, 0
+    stop_left, stop_right = False, False
+    for i in range(1, bmap_np.shape[1]):
+        left = bmap_np[:, i]
+        right = bmap_np[:, bmap_np.shape[1]-i]
+        if not (left == zero_col).all():
+            stop_left = True
+        if not (right == zero_col).all():
+            stop_right = True
+        if stop_left and stop_right:
+            diff = abs(left_w - right_w)
+            if left_w < right_w:
+                img_np = img_np[:, :bmap_np.shape[1]-diff, :]
+                bmap_np = bmap_np[:, :bmap_np.shape[1]-diff]
+            else:
+                img_np = img_np[:, diff:, :]
+                bmap_np = bmap_np[:, diff:]
+            break
+        elif stop_left:
+            right_w += 1
+        elif stop_right:
+            left_w += 1
+        else:
+            right_w += 1
+            left_w += 1
+    blank_row_height = 10
+    num_sections = int(img_height / blank_row_height)
+    blank_row = np.zeros((blank_row_height, bmap_np.shape[1]))
+    curr_top = 0
+    white_rows = []
+    for section in range(num_sections):
+        curr_bot = curr_top + blank_row_height
+        sub_img = bmap_np[curr_top:curr_bot, :]
+        if (sub_img == blank_row).all():
+            if len(white_rows) == 0:
+                white_rows.append(curr_bot)
+                curr_top += blank_row_height
+                continue
+            last_white_bot = white_rows[len(white_rows)-1]
+            if last_white_bot == curr_top:
+                white_rows[len(white_rows)-1] = curr_bot
+            else:
+                white_rows.append(curr_bot)
+        curr_top += blank_row_height
+    rows = []
+    for i in range(len(white_rows)-1):
+        curr = white_rows[i]
+        nxt = white_rows[i+1]
+        rows.append((bmap_np[curr:nxt, :], curr, nxt))
+    block_coords = set()
+    block_coords2 = {}
+    blocks_list = []
+    line_width = 5
+    for row, top_coord, bottom_coord in rows:
+        num_cols = get_columns_for_row(row)
+        blocks, coords, col_idx = divide_row_into_columns(row, num_cols)
+        for ind, b in enumerate(blocks):
+            c = coords[ind]
+            column_index = col_idx[ind]
+            blank_row_height = 10
+            num_sections = int(b.shape[0] / blank_row_height)
+            blank_row = np.zeros((blank_row_height, b.shape[1]))
+            curr_top = 0
+            curr_bot = blank_row_height
+            white_rows = []
+            while curr_bot < b.shape[0]-1:
+                sub_img = b[curr_top:curr_bot, :]
+                if (sub_img == blank_row).all():
+                    if len(white_rows) == 0:
+                        white_rows.append(curr_bot)
+                        curr_top += 1
+                        curr_bot = curr_top + blank_row_height
+                        continue
+                    last_white_bot = white_rows[len(white_rows)-1]
+                    if last_white_bot == curr_bot-1:
+                        white_rows[len(white_rows)-1] = curr_bot
+                    else:
+                        white_rows.append(curr_bot)
+                elif curr_top == 0:
+                    white_rows.append(0)
+                curr_top += 1
+                curr_bot = curr_top + blank_row_height
+            rows2 = []
+            for i in range(len(white_rows)-1):
+                curr = white_rows[i]
+                nxt = white_rows[i+1]
+                rows2.append((b[curr:nxt, :], curr, nxt))
+            for r, c2, n in rows2:
+                components = get_components(r, numpy=True)
+                x1 = min(components, key=lambda x: x[1])
+                x1 = x1[1]
+                y1 = min(components, key=lambda x: x[0])
+                y1 = y1[0]
+                x2 = max(components, key=lambda x: x[3])
+                x2 = x2[3]
+                y2 = max(components, key=lambda x: x[2])
+                y2 = y2[2]
+
+                key = (num_cols, column_index)
+                val = (top_coord + c2 + y1, c[0] + x1, top_coord + c2 + y2, c[0]+x2)
+                if key in block_coords2:
+                    block_coords2[key].append(val)
+                else:
+                    block_coords2[key] = [val]
+    for key in block_coords2:
+        coords_list = block_coords2[key]
+        for ind2, bc in enumerate(coords_list):
+            for bc2 in coords_list[ind2:]:
+                tl_y1, tl_x1, br_y1, br_x1 = bc
+                tl_y2, tl_x2, br_y2, br_x2 = bc2
+                block_coords.add((min(tl_x1, tl_x2), min(tl_y1, tl_y2), max(br_x1, br_x2), max(br_y1, br_y2)))
+    block_coords = list(block_coords)
+    img_p = os.path.basename(img_p)
+    write_p = os.path.join(output_dir, img_p[:-4] + '.csv')
+    write_img_p = os.path.join(output_dir, img_p)
+    with open(write_p, 'w') as wp:
+        for coord in block_coords:
+            wp.write(f'{coord[0]},{coord[1]},{coord[2]},{coord[3]}\n')
+    draw_cc(img_np, block_coords, write_img_p=write_img_p)
+    return 'hello'
+
+
+        #cc_list = []
+        #for coord, block in zip(block_coords, blocks_list):
+        #    components = get_components(block, numpy=True)
+        #    if len(components) == 0:
+        #        continue
+        #    # four  passes. left/right/bot/top components
+        #    def calc_distance_y(component):
+        #        c_tl_y, c_tl_x, c_br_y, c_br_x = component
+        #        if c_tl_x <= curr_x <= c_br_x:
+        #            ret = math.sqrt((c_tl_y - curr_y) ** 2)
+        #            return ret
+        #        return float('inf')
+
+        #    def calc_distance_x(component):
+        #        c_tl_y, c_tl_x, c_br_y, c_br_x = component
+        #        if c_tl_y <= curr_y <= c_br_y:
+        #            ret = math.sqrt((c_tl_x - curr_x) ** 2)
+        #            return ret
+        #        return float('inf')
+
+        #    def filter_above_y(component):
+        #        c_tl_y, c_tl_x, c_br_y, c_br_x = component
+        #        return c_tl_y > curr_y
+
+        #    def filter_less_x(component):
+        #        c_tl_y, c_tl_x, c_br_y, c_br_x = component
+        #        return c_tl_x > curr_x
+        #    curr_y = 0
+        #    curr_x = 0
+        #    delta = 2
+        #    curr_components = components
+        #    left_components = set()
+        #    while len(curr_components) > 0:
+        #        dist_curr_components = [calc_distance_x(c) for c in curr_components]
+        #        min_d = min(dist_curr_components)
+        #        if min_d == float('inf'):
+        #            curr_components = [c for c in curr_components if filter_above_y(c)]
+        #            curr_y += delta
+        #            continue
+        #        i = next(ind for ind, d in enumerate(dist_curr_components) if d == min_d)
+        #        c_tl_y, c_tl_x, c_br_y, c_br_x = curr_components[i]
+        #        left_components.add(curr_components[i])
+        #        curr_components = [c for c in curr_components if filter_above_y(c)]
+        #        curr_y += delta
+
+        #    left_components = list(left_components)
+
+
+        #    curr_y = 0
+        #    curr_x = block.shape[1]
+        #    curr_components = components
+        #    right_components = set()
+        #    while len(curr_components) > 0:
+        #        dist_curr_components = [calc_distance_x(c) for c in curr_components]
+        #        min_d = min(dist_curr_components)
+        #        if min_d == float('inf'):
+        #            curr_components = [c for c in curr_components if filter_above_y(c)]
+        #            curr_y += delta
+        #            continue
+        #        i = next(ind for ind, d in enumerate(dist_curr_components) if d == min_d)
+        #        c_tl_y, c_tl_x, c_br_y, c_br_x = curr_components[i]
+        #        right_components.add(curr_components[i])
+        #        curr_components = [c for c in curr_components if filter_above_y(c)]
+        #        curr_y += delta
+
+        #    right_components = list(right_components)
+
+
+        #    curr_y = 0
+        #    curr_x = 0
+        #    curr_components = components
+        #    top_components = set()
+        #    while len(curr_components) > 0:
+        #        dist_curr_components = [calc_distance_y(c) for c in curr_components]
+        #        min_d = min(dist_curr_components)
+        #        if min_d == float('inf'):
+        #            curr_components = [c for c in curr_components if filter_less_x(c)]
+        #            curr_x += delta
+        #            continue
+        #        i = next(ind for ind, d in enumerate(dist_curr_components) if d == min_d)
+        #        c_tl_y, c_tl_x, c_br_y, c_br_x = curr_components[i]
+        #        top_components.add(curr_components[i])
+        #        curr_components = [c for c in curr_components if filter_less_x(c)]
+        #        curr_x += delta
+        #        # Same as above, but switch x and y order
+        #        #dist_curr_components_x = [calc_distance_x(c) for c in curr_components]
+        #        #min_x_d = min(dist_curr_components_x)
+        #        #x_comps = [curr_components[ind] for ind, d in enumerate(dist_curr_components_x) if d == min_x_d]
+        #        #dist_x_comps = [calc_distance_x(c) for c in x_comps]
+        #        #min_x_d = min(dist_x_comps)
+        #        #i = next(ind for ind, d in enumerate(dist_x_comps) if d == min_x_d)
+        #        #c_tl_y, c_tl_x, c_br_y, c_br_x = x_comps[i]
+        #        #curr_x = c_br_x
+        #        #top_components.append(x_comps[i])
+        #        #curr_components = [c for c in curr_components if filter_less_x(c)]
+        #    top_components = list(top_components)
+
+
+        #    curr_y = block.shape[0]
+        #    curr_x = 0
+        #    curr_components = components
+        #    bottom_components = set()
+        #    while len(curr_components) > 0:
+        #        dist_curr_components = [calc_distance_y(c) for c in curr_components]
+        #        min_d = min(dist_curr_components)
+        #        if min_d == float('inf'):
+        #            curr_components = [c for c in curr_components if filter_less_x(c)]
+        #            curr_x += delta
+        #            continue
+        #        i = next(ind for ind, d in enumerate(dist_curr_components) if d == min_d)
+        #        c_tl_y, c_tl_x, c_br_y, c_br_x = curr_components[i]
+        #        bottom_components.add(curr_components[i])
+        #        curr_components = [c for c in curr_components if filter_less_x(c)]
+        #        curr_x += delta
+
+        #    bottom_components = list(bottom_components)
+        #    all_components = [left_components, right_components, top_components, bottom_components]
+
+        #    tl_y, tl_x, br_y, br_x = coord[0], coord[1], coord[2], coord[3]
+        #    def translate_to_global(component):
+        #        c_tl_y, c_tl_x, c_br_y, c_br_x = component
+        #        return (c_tl_x + tl_x, c_tl_y + tl_y, c_br_x + tl_x, c_br_y + tl_y)
+        #    translated_components = []
+        #    for comp_list in all_components:
+        #        translated = [translate_to_global(c) for c in comp_list]
+        #        translated_components.append(translated)
+        #    components_set = set()
+        #    for ind, component_set in enumerate(translated_components):
+        #        if ind == len(translated_components)-1:
+        #            break
+        #        for next_component_set in translated_components[ind+1:]:
+        #            for component in component_set:
+        #                for next_component in next_component_set:
+        #                    tl_x1, tl_y1, br_x1, br_y1 = component
+        #                    tl_x2, tl_y2, br_x2, br_y2 = next_component
+        #                    # Lets pretend the max/min functions don't exist, shhhhhhh
+        #                    tl_x = tl_x1 if tl_x1 < tl_x2 else tl_x2
+        #                    tl_y = tl_y1 if tl_y1 < tl_y2 else tl_y2
+        #                    br_x = br_x1 if br_x1 > br_x2 else br_x2
+        #                    br_y = br_y1 if br_y1 > br_y2 else br_y2
+        #                    components_set.add((tl_x, tl_y, br_x, br_y))
+        #    components_list = list(components_set)
+        #    components_list = [list(x) for x in components_list]
+        #    cc_list.append(components_list)
+        ## Flatten
+        #cc_list = [c for c_list in cc_list for c in c_list]
+        #cc_list_suppressed = non_max_suppression_fast(np.asarray(cc_list), 0.9999)
+        #draw_cc(img_np, cc_list_suppressed)
+        #print(len(cc_list_suppressed))
+        #return cc_list
+
+
+def draw_grid(img_np, block_coords):
+    for coords in block_coords:
+        print(coords)
+        img_np[coords[0]:coords[2], coords[1]-1:coords[1]+1, :] = 50
+        img_np[coords[0]:coords[2], coords[3]-1:coords[3]+1, :] = 50
+        img_np[coords[0]-1:coords[0]+1, coords[1]:coords[3], :] = 50
+        img_np[coords[2]-1:coords[2]+1, coords[1]:coords[3], :] = 50
+    Image.fromarray(img_np).save('test.png')
+
+
+def draw_cc(img_np, cc_list, write_img_p=None):
+    for coords in cc_list:
+#        if coords[1] > 110 and coords[3] < 620:
+        img_np[coords[1]:coords[3], coords[0]-2:coords[0]+2, :] = 50
+        img_np[coords[1]:coords[3], coords[2]-2:coords[2]+2, :] = 50
+        img_np[coords[1]-2:coords[1]+2, coords[0]:coords[2], :] = 50
+        img_np[coords[3]-2:coords[3]+2, coords[0]:coords[2], :] = 50
+    write_p = 'test.png' if write_img_p is None else write_img_p
+    Image.fromarray(img_np).save(write_p)
+
+
+def get_columns_for_row(row):
+    # 3/100 width = test width. We need half that for later
+    test_width = int(math.ceil(row.shape[1] / 200))
+    half_test_width = int(math.ceil(test_width / 2))
+    curr_c = 1
+    for c in range(2, 6):
+        # Attempt to divide rows into c columns
+        row_w = row.shape[1]
+        # Check the row at the middle positions for column
+        test_points = []
+        for i in range(1, c):
+            test_points.append(int(row_w / c * i))
+        def mark_empty_block(p):
+            block = row[:, p-half_test_width:p+half_test_width]
+            test_col = np.zeros((block.shape[0], block.shape[1]))
+            return (block == test_col).all()
+        test_blocks = [mark_empty_block(p) for p in test_points]
+        if False not in test_blocks:
+            curr_c = c
+    return curr_c
+   
+
+
+def divide_row_into_columns(row, n_columns):
+    splits = []
+    coords = []
+    col_idx = []
+    for c in range(1, n_columns):
+        prev_row_div = int(row.shape[1] / n_columns * (c - 1))
+        row_div = int(row.shape[1] / n_columns * c)
+        coords.append((prev_row_div, row_div))
+        splits.append(row[:, prev_row_div:row_div])
+        col_idx.append(c)
+    final_col = int(row.shape[1] / n_columns * (n_columns - 1))
+    splits.append(row[:, final_col:])
+    coords.append((final_col, row.shape[1]))
+    col_idx.append(n_columns)
+    return splits, coords, col_idx
+
+def test_divide_row_into_columns():
+    row = np.ones((1, 30))
+    actual, _ = divide_row_into_columns(row, 2)
+    expected = np.ones((1, 15))
+    for a in actual:
+        if a.shape != expected.shape:
+            print(f'Test 1 failed test_divide_row_into_columns(): expected: {expected.shape} actual: {a.shape}')
+
+    actual, _ = divide_row_into_columns(row, 3)
+    expected = np.ones((1, 10))
+    for a in actual:
+        if a.shape != expected.shape:
+            print(f'Test 2 failed test_divide_row_into_columns(): expected: {expected.shape} actual: {a.shape}')
+
+def test_get_columns_for_row():
+    row = np.ones((1, 10))
+    expected = 1
+    actual = get_columns_for_row(row)
+    if expected != actual:
+        print(f'Test 1 failed test_get_columns_for_row(): expected: {expected} actual: {actual}')
+
+    row = np.ones((2, 20))
+    row[:, 8:12] = 0
+    expected = 2
+    actual = get_columns_for_row(row)
+    if expected != actual:
+        print(f'Test 2 failed test_get_columns_for_row(): expected: {expected} actual: {actual}')
+
+    row = np.ones((60, 50))
+    row[:, 8:13] = 0
+    row[:, 18:23] = 0
+    row[:, 28:33] = 0
+    row[:, 38:43] = 0
+    expected = 5
+    actual = get_columns_for_row(row)
+    if expected != actual:
+        print(f'Test 3 failed test_get_columns_for_row(): expected: {expected} actual: {actual}')
+
+
+
 
 if __name__ == '__main__':
-    test_convert_image_to_binary_map()
-    test_get_components()
-    test_get_proposals()
-    img = Image.open('1812.10437.pdf-0001.png')
-    ts = ToTensor()
-    tens = ts(img)
-    tens = tens[:3, :, :]
-    us = tens.unsqueeze(0)
-    start = timer()
-    proposals = get_proposals(us, output_blur=True)
-    end = timer()
-    print(f'Proposals timer: {end - start}')
-    print(f'Number of proposals: {proposals.shape[1]}')
+    pool = mp.Pool(processes=240)
+    results = [pool.apply(write_proposals, args=(os.path.join('img',x),)) for x in os.listdir('img')]
+    print(results)
+    #test_divide_row_into_columns()
+    #test_get_columns_for_row()
+    #test_convert_image_to_binary_map()
+    #test_get_components()
+    #test_get_proposals()
+    #img = Image.open('1812.10437.pdf-0001.png')
+    #ts = ToTensor()
+    #tens = ts(img)
+    #tens = tens[:3, :, :]
+    #us = tens.unsqueeze(0)
+    #start = timer()
+    #proposals = get_proposals(us, output_blur=True)
+    #end = timer()
+    #print(f'Proposals timer: {end - start}')
+    #print(f'Number of proposals: {proposals.shape[1]}')
 
 
 
