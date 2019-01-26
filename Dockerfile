@@ -90,5 +90,3 @@ USER root
 
 RUN python3 setup.py build develop
 
-USER user
-
