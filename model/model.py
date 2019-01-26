@@ -62,7 +62,7 @@ class MMFasterRCNN(nn.Module):
                                                         kwargs["HEAD"]["INTERMEDIATE"],
                                                         len(self.cls_names))
 
-    def forward(self, img, device=torch.device("cpu")):
+    def forward(self, img, device=torch.device("cpu"),proposals=None):
         """
         Process an Image through the network
         :param img: [Nx3xSIZE x SIZE] tensor
@@ -71,20 +71,14 @@ class MMFasterRCNN(nn.Module):
         """
         N = img.size(0)
         feature_map = self.backbone.forward(img)
-        if self.RPN is not None:
-            rpn_cls_branch_preds, rpn_cls_branch_scores, rpn_bbox_branch =\
-                self.RPN(feature_map)
-            rois = self.proposal_layer(rpn_cls_branch_preds, rpn_bbox_branch, device)
-            maps = []
-            for batch_el in range(N):
-                map = self.ROI_pooling(feature_map, rois[batch_el])
-                maps.append(map)
-            maps = torch.stack(maps)
-        else:
-            rois = self.proposal_layer(img, verbose=True)
-            rois.to(device)
+        maps = []
+        for batch_el in range(N):
+            rois = proposals[batch_el].to(device)
+            map = self.ROI_pooling(feature_map, rois)
+            maps = maps.append(map)
+        maps = torch.stack(maps)
         cls_preds, cls_scores, bbox_deltas = self.classification_head(maps)
-        return rpn_cls_branch_scores, rpn_bbox_branch, rois, cls_preds, cls_scores, bbox_deltas
+        return proposal,cls_preds, cls_scores, bbox_deltas
 
 
     def set_weights(self,mean, std):

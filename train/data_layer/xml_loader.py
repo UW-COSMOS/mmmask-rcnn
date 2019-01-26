@@ -6,6 +6,7 @@ Author: Josh McGrath
 import os
 from os.path import splitext
 from skimage import io
+from numpy import genfromtxt
 import torch
 from xml.etree import ElementTree as ET
 
@@ -59,6 +60,14 @@ def load_image(base_path, identifier, img_type):
     img_data = img_data / 255.0
     return img_data
 
+def load_proposal(base_path, identifier):
+	"""
+	Load a set of proposals into memory
+	
+	"""
+	path = os.path.join(base_path, f"{identifier}.csv")
+	np_arr = genfromtxt(path, delimiter=",")
+	return torch.from_numpy(arr)
 
 def load_gt(xml_dir, identifier):
     """
@@ -80,7 +89,7 @@ class XMLLoader:
     it is expected that the directories have no files
     other than annotations
     """
-    def __init__(self, xml_dir, img_dir, img_type):
+    def __init__(self, xml_dir, img_dir,proposal_dir, img_type):
         """
         Initialize a XML loader object
         :param xml_dir: directory to get XML from
@@ -89,6 +98,7 @@ class XMLLoader:
         """
         self.xml_dir = xml_dir
         self.img_dir = img_dir
+        self.proposal_dir = propsal_dir
         self.img_type = img_type
         self.imgs = os.listdir(img_dir)
         self.identifiers = [splitext(img)[0] for img in self.imgs]
@@ -102,4 +112,5 @@ class XMLLoader:
         identifier = self.identifiers[item]
         img = load_image(self.img_dir, identifier, self.img_type)
         gt = load_gt(self.xml_dir, identifier)
+        proposals = load_proposal(self.proposal_dir, identifier)
         return img, gt

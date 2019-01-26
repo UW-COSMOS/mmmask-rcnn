@@ -4,3 +4,4 @@ scikit-image
 bitmath
 tensorboardX
 tensorboard
+tqdm

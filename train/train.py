@@ -31,7 +31,8 @@ def collate(batch, cls_dict):
     exs = [item[0] for item in batch]
     gt_box = [item[1][0] for item in batch]
     gt_cls = [unpack_cls(cls_dict, item[1][1]) for item in batch]
-    return torch.stack(exs).float(), gt_box, gt_cls
+    proposals = [item[2] for item in batch]
+    return torch.stack(exs).float(), gt_box, gt_cls, torch.stack(proposals)
 
 def format(bytes):
     return bitmath.Byte(bytes).to_GiB()
@@ -53,16 +54,10 @@ class TrainerHelper:
         self.device = device
         if params["USE_TENSORBOARD"]:
             self.writer = SummaryWriter()
-        self.scheduler = Scheduler(self.params["SWITCH_PERIOD"])
-        self.anchor_target_layer = AnchorTargetLayer(model.ratios,
-                model.scales,
-                model.img_size,
-                params["RPN"]["UPPER"],
-                params["RPN"]["LOWER"]).to(device)
         self.head_target_layer = HeadTargetLayer(model.ratios,
-                                                 model.scales,
-                                                 model.img_size,
-                                                 ncls=len(model.cls_names)).to(device)
+                                     model.scales,
+                                     model.img_size,
+                                     ncls=len(model.cls_names)).to(device)
 
 
     def train(self):
@@ -75,57 +70,35 @@ class TrainerHelper:
                             shuffle=True)
         batch_cls_loss = 0
         batch_bbox_loss = 0
-        batch_rpn_cls_loss = 0
-        batch_rpn_bbox_loss = 0
-        batch_fg = 0
-        batch_bg = 0
-        rpn_pred = 0
         iter = 0
         for epoch in tqdm(range(self.params["EPOCHS"]),desc="epochs"):
             for idx, batch in enumerate(tqdm(loader, desc="batches", leave=False)):
                 optimizer.zero_grad()
-                ex, gt_box, gt_cls = batch
+                ex, gt_box, gt_cls,proposal = batch
                 ex = ex.to(self.device)
                 gt_box = gt_box
                 gt_cls = [gt.to(self.device) for gt in gt_cls]
                 gt_box = [gt.reshape(1, -1, 4).float().to(self.device) for gt in gt_box]
                 # forward pass
-                rpn_cls_scores, rpn_bbox_deltas, rois, cls_preds, cls_scores, bbox_deltas = self.model(ex, self.device)
+                rois, cls_preds, cls_scores, bbox_deltas = self.model(ex, self.device)
                 # calculate losses
-                rpn_cls_loss, rpn_bbox_loss, bg_num, fg_num, avg_pred  = self.anchor_target_layer(rpn_cls_scores, rpn_bbox_deltas,gt_box, self.device)
                 cls_loss, bbox_loss = self.head_target_layer(rois, cls_scores, bbox_deltas, gt_box, gt_cls, self.device)
                 if rpn_cls_loss != rpn_cls_loss:
                     raise Exception("got nan class loss")
                 # update batch losses, cast as float so we don't keep gradient history
                 batch_cls_loss += float(cls_loss)
                 batch_bbox_loss += float(bbox_loss)
-                batch_rpn_bbox_loss += float(rpn_bbox_loss)
-                batch_rpn_cls_loss += float(rpn_cls_loss)
-                batch_bg += bg_num
-                batch_fg += fg_num
                 rpn_pred += avg_pred/self.params["PRINT_PERIOD"]
                 if idx % self.params["PRINT_PERIOD"] == 0:
-                    self.output_batch_losses(batch_rpn_cls_loss,
-                                             batch_rpn_bbox_loss,
+                    self.output_batch_losses(
                                              batch_cls_loss,
                                              batch_bbox_loss,
                                              iter, 
-                                             float(batch_fg)/batch_bg,
-                                             rpn_pred)
+                                             float(batch_fg)/batch_bg)
                     batch_cls_loss = 0
                     batch_bbox_loss = 0
-                    batch_rpn_cls_loss = 0
-                    batch_rpn_bbox_loss = 0
-                    batch_bg = 0
-                    batch_fg = 0
-                    rpn_pred = 0
                     iter += 1
-                if self.scheduler.period == Scheduler.RPN:
-                    loss = rpn_cls_loss + rpn_bbox_loss
-                elif self.scheduler.period  == Scheduler.CLASS_HEAD:
-                    loss = cls_loss + bbox_loss
-                else:
-                    loss = rpn_cls_loss + rpn_bbox_loss + cls_loss + bbox_loss
+                loss = cls_loss + bbox_loss
                 loss.backward()
                 nn.utils.clip_grad_value_(self.model.parameters(), 5)
                 optimizer.step()
@@ -135,7 +108,7 @@ class TrainerHelper:
                 path = join(self.params["SAVE_DIR"], name)
                 torch.save(self.model.state_dict(), path)
 
-    def output_batch_losses(self, rpn_cls_loss, rpn_bbox_loss, cls_loss, bbox_loss, iter, bg_ratio,rpn_pred):
+    def output_batch_losses(self,  cls_loss, bbox_loss, iter ):
         """
         output either by priting or to tensorboard
         :param rpn_cls_loss:
@@ -148,14 +121,10 @@ class TrainerHelper:
             vals = {
                 "bbox_loss": bbox_loss,
                 "cls_loss": cls_loss,
-                "rpn_cls_loss": rpn_cls_loss,
-                "rpn_bbox_loss": rpn_bbox_loss,
                 "fg_bg_ratio": bg_ratio,
-                "avg_rpn_pred": rpn_pred
             }
             for key in vals:
                 self.writer.add_scalar(key, vals[key], iter)
-        print(f"  rpn_cls_loss: {rpn_cls_loss}, rpn_bbox_loss: {rpn_bbox_loss}")
         print(f"  head_cls_loss: {cls_loss}, bbox_loss: {bbox_loss}")
 
 
