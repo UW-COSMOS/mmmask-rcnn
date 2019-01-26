@@ -128,6 +128,7 @@ class AnchorTargetLayer(nn.Module):
             pos_inds_perm = torch.randperm(pos_inds.size(0))[:npos]
             pos_inds = pos_inds[pos_inds_perm]
             bg_num = self.sample_num - npos
+            bg_num = min(60, bg_num)
             perm = torch.randperm(neg_inds.size(0))
             sample_neg_inds = perm[:bg_num]
             sample_ned_inds = neg_inds[sample_neg_inds]

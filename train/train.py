@@ -54,7 +54,11 @@ class TrainerHelper:
         if params["USE_TENSORBOARD"]:
             self.writer = SummaryWriter()
         self.scheduler = Scheduler(self.params["SWITCH_PERIOD"])
-        self.anchor_target_layer = AnchorTargetLayer(model.ratios, model.scales,model.img_size).to(device)
+        self.anchor_target_layer = AnchorTargetLayer(model.ratios,
+                model.scales,
+                model.img_size,
+                params["RPN"]["UPPER"],
+                params["RPN"]["LOWER"]).to(device)
         self.head_target_layer = HeadTargetLayer(model.ratios,
                                                  model.scales,
                                                  model.img_size,
@@ -123,7 +127,7 @@ class TrainerHelper:
                 else:
                     loss = rpn_cls_loss + rpn_bbox_loss + cls_loss + bbox_loss
                 loss.backward()
-                nn.utils.clip_grad_value_(self.model.parameters(), 9)
+                nn.utils.clip_grad_value_(self.model.parameters(), 5)
                 optimizer.step()
                 self.scheduler.step()
             if epoch % self.params["CHECKPOINT_PERIOD"] == 0:
