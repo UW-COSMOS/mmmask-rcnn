@@ -47,7 +47,6 @@ class MMFasterRCNN(nn.Module):
         else:
             self.RPN = None
             self.proposal_layer = cc.get_proposals
-        #TODO spatial scale?
         output_size = (kwargs["ROI_POOL"]["OUTPUT_SIZE"],kwargs["ROI_POOL"]["OUTPUT_SIZE"])
         self.ROI_pooling = ROIAlign(
             output_size,
@@ -75,9 +74,13 @@ class MMFasterRCNN(nn.Module):
         maps = []
         for batch_el in range(N):
             rois = proposals[batch_el].to(device).float()
+            # add fake scores
+            L, _ = rois.shape
+            fake_rois = torch.zeros(L,5).to(device)
+            fake_rois[:, 1:] = rois
+            rois = fake_rois
             map = self.ROI_pooling(feature_map, rois)
             maps.append(map)
-            print(map.shape)
         maps = torch.stack(maps)
         cls_preds, cls_scores, bbox_deltas = self.classification_head(maps)
         return proposals,cls_preds, cls_scores, bbox_deltas
