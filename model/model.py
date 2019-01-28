@@ -80,7 +80,7 @@ class MMFasterRCNN(nn.Module):
             print(map.shape)
         maps = torch.stack(maps)
         cls_preds, cls_scores, bbox_deltas = self.classification_head(maps)
-        return proposal,cls_preds, cls_scores, bbox_deltas
+        return proposals,cls_preds, cls_scores, bbox_deltas
 
 
     def set_weights(self,mean, std):

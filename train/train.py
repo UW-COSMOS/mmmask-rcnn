@@ -98,19 +98,15 @@ class TrainerHelper:
                 # forward pass
                 rois, cls_preds, cls_scores, bbox_deltas = self.model(ex, self.device, proposals=proposals)
                 # calculate losses
-                cls_loss, bbox_loss = self.head_target_layer(rois, cls_scores, bbox_deltas, gt_box, gt_cls, self.device)
-                if rpn_cls_loss != rpn_cls_loss:
-                    raise Exception("got nan class loss")
+                cls_loss, bbox_loss = self.head_target_layer(rois[0].unsqueeze(0).to(self.device).float(), cls_scores, bbox_deltas, gt_box, gt_cls, self.device)
                 # update batch losses, cast as float so we don't keep gradient history
                 batch_cls_loss += float(cls_loss)
                 batch_bbox_loss += float(bbox_loss)
-                rpn_pred += avg_pred/self.params["PRINT_PERIOD"]
                 if idx % self.params["PRINT_PERIOD"] == 0:
                     self.output_batch_losses(
                                              batch_cls_loss,
                                              batch_bbox_loss,
-                                             iter, 
-                                             float(batch_fg)/batch_bg)
+                                             iter) 
                     batch_cls_loss = 0
                     batch_bbox_loss = 0
                     iter += 1
@@ -118,7 +114,6 @@ class TrainerHelper:
                 loss.backward()
                 nn.utils.clip_grad_value_(self.model.parameters(), 5)
                 optimizer.step()
-                self.scheduler.step()
             if epoch % self.params["CHECKPOINT_PERIOD"] == 0:
                 name = f"model_{epoch}.pth"
                 path = join(self.params["SAVE_DIR"], name)
@@ -137,7 +132,6 @@ class TrainerHelper:
             vals = {
                 "bbox_loss": bbox_loss,
                 "cls_loss": cls_loss,
-                "fg_bg_ratio": bg_ratio,
             }
             for key in vals:
                 self.writer.add_scalar(key, vals[key], iter)
