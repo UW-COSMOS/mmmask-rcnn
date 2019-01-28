@@ -67,7 +67,7 @@ def load_proposal(base_path, identifier):
 	"""
 	path = os.path.join(base_path, f"{identifier}.csv")
 	np_arr = genfromtxt(path, delimiter=",")
-	return torch.from_numpy(arr)
+	return torch.from_numpy(np_arr)
 
 def load_gt(xml_dir, identifier):
     """
@@ -98,7 +98,7 @@ class XMLLoader:
         """
         self.xml_dir = xml_dir
         self.img_dir = img_dir
-        self.proposal_dir = propsal_dir
+        self.proposal_dir = proposal_dir
         self.img_type = img_type
         self.imgs = os.listdir(img_dir)
         self.identifiers = [splitext(img)[0] for img in self.imgs]
@@ -113,4 +113,4 @@ class XMLLoader:
         img = load_image(self.img_dir, identifier, self.img_type)
         gt = load_gt(self.xml_dir, identifier)
         proposals = load_proposal(self.proposal_dir, identifier)
-        return img, gt
+        return img, gt, proposals

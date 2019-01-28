@@ -22,6 +22,22 @@ def unpack_cls(cls_dict, gt_list):
     return torch.tensor(list(arr))
 
 
+def pad_proposals(proposals):
+    """
+    Pad proposals with garbage zero coords so they can be batched
+    """
+    max_num = max([proposal.size(0) for proposal in proposals ])
+    new = []
+    for proposal in proposals:
+        n, _ = proposal.shape
+        diff = max_num - n
+        if diff == 0:
+            new.append(proposal)
+        proposal = torch.cat(proposal, torch.zeros(diff, 4))
+        new.append(proposal)
+    return torch.stack(new)
+
+
 def collate(batch, cls_dict):
     """
     collation function for GTDataset class
@@ -32,7 +48,7 @@ def collate(batch, cls_dict):
     gt_box = [item[1][0] for item in batch]
     gt_cls = [unpack_cls(cls_dict, item[1][1]) for item in batch]
     proposals = [item[2] for item in batch]
-    return torch.stack(exs).float(), gt_box, gt_cls, torch.stack(proposals)
+    return torch.stack(exs).float(), gt_box, gt_cls, proposals
 
 def format(bytes):
     return bitmath.Byte(bytes).to_GiB()
@@ -74,13 +90,13 @@ class TrainerHelper:
         for epoch in tqdm(range(self.params["EPOCHS"]),desc="epochs"):
             for idx, batch in enumerate(tqdm(loader, desc="batches", leave=False)):
                 optimizer.zero_grad()
-                ex, gt_box, gt_cls,proposal = batch
+                ex, gt_box, gt_cls,proposals = batch
                 ex = ex.to(self.device)
                 gt_box = gt_box
                 gt_cls = [gt.to(self.device) for gt in gt_cls]
                 gt_box = [gt.reshape(1, -1, 4).float().to(self.device) for gt in gt_box]
                 # forward pass
-                rois, cls_preds, cls_scores, bbox_deltas = self.model(ex, self.device)
+                rois, cls_preds, cls_scores, bbox_deltas = self.model(ex, self.device, proposals=proposals)
                 # calculate losses
                 cls_loss, bbox_loss = self.head_target_layer(rois, cls_scores, bbox_deltas, gt_box, gt_cls, self.device)
                 if rpn_cls_loss != rpn_cls_loss:

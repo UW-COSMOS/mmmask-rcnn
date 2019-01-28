@@ -91,9 +91,8 @@ def get_resnet(nlayers=50):
 			  param.requires_grad = False
     shared = base.layer4
     shared.requires_grad = True
-    backbone = nn.Sequential(backbone_frozen, shared)
     backbone.output_depth = 2048
-    return backbone
+    return backbone_frozen, shared
 
 if __name__ == '__main__':
     pass

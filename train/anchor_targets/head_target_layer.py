@@ -85,7 +85,6 @@ class HeadTargetLayer(nn.Module):
         N, L, C = cls_scores.shape
         # ensure center and original anchors have been precomputed
         # drop objectness score
-        rois = rois[:, :, 1:]
         max_scores, score_idxs = torch.max(cls_scores, dim=2)
         # reshape bbox deltas to be [N, L x C x 4] so we can index by score_idx
         bbox_deltas = bbox_deltas.reshape(N, L, C, 4)

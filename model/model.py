@@ -23,7 +23,7 @@ class MMFasterRCNN(nn.Module):
         self.img_size = kwargs["IMG_SIZE"]
         self.scales = kwargs["SCALES"]
         self.ratios = kwargs["RATIOS"]
-        self.backbone = get_backbone(kwargs["BACKBONE"])
+        self.backbone,self.shared = get_backbone(kwargs["BACKBONE"])
 
         # size should be informed at least partially by the receptive field
         # ensure this is meant to be a free parameter
@@ -71,24 +71,29 @@ class MMFasterRCNN(nn.Module):
         """
         N = img.size(0)
         feature_map = self.backbone.forward(img)
+        feature_map = self.shared(feature_map)
         maps = []
         for batch_el in range(N):
-            rois = proposals[batch_el].to(device)
+            rois = proposals[batch_el].to(device).float()
             map = self.ROI_pooling(feature_map, rois)
-            maps = maps.append(map)
+            maps.append(map)
+            print(map.shape)
         maps = torch.stack(maps)
         cls_preds, cls_scores, bbox_deltas = self.classification_head(maps)
         return proposal,cls_preds, cls_scores, bbox_deltas
 
 
     def set_weights(self,mean, std):
-        for parm in self.modules():
-            if not hasattr(parm, "weight"):
+        for child in self.children():
+            if child == self.shared:
                 continue
-            w = parm.weight
-            # skip convolutional layers
-            if w.requires_grad:
-                nn.init.normal_(w, mean, std)
+            for parm in self.modules():
+                if not hasattr(parm, "weight"):
+                    continue
+                w = parm.weight
+                # skip convolutional layers
+                if w.requires_grad:
+                    nn.init.normal_(w, mean, std)
 
                 
 
