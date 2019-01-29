@@ -5,3 +5,9 @@ bitmath
 tensorboardX
 tensorboard
 tqdm
+opencv-python
+pascal-voc-writer
+imgaug
+dominate
+pytesseract
+Pillow

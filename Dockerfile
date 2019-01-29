@@ -78,7 +78,7 @@ CMD ["python3"]
 
 USER root
 
-RUN apt-get update && apt-get -y install gcc g++ vim
+RUN apt-get update && apt-get -y install gcc g++ vim imagemagick tesseract-ocr libtesseract-dev
 
 COPY . .
 

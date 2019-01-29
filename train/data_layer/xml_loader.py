@@ -121,6 +121,10 @@ class XMLLoader:
     def __getitem__(self, item):
         identifier = self.identifiers[item]
         img = load_image(self.img_dir, identifier, self.img_type)
-        gt = load_gt(self.xml_dir, identifier)
+        gt = None
+        if self.xml_dir is not None:
+            gt = load_gt(self.xml_dir, identifier)
         proposals = load_proposal(self.proposal_dir, identifier)
-        return img, gt, proposals
+        if gt is not None:
+            return img, gt, proposals, identifier
+        return img, proposals, identifier
