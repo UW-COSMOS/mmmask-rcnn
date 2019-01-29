@@ -6,47 +6,11 @@ Author: Josh McGrath
 import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss
-from utils.bbox_overlaps import bbox_overlaps
+from utils.matcher import match, NEGATIVE
 from utils.generate_anchors import generate_anchors
 from train.losses.smooth_l1_loss import SmoothL1Loss
 from utils.boundary_utils import cross_boundary
 
-NEITHER = -1
-NEGATIVE = -2
-
-
-
-def match(regions, gt_boxes, upper, lower, device):
-    """
-    Get positive region indexes for each box
-    :param regions: predicted regions [KA x 4]
-    :param gt_boxes: [ M x 4]
-    :return: [KA x 4] index to gt box of boxes which have either
-        a) an IOU of 0.7 or greater with a gt_box
-        b) the highest IOU for a given gt_box
-
-
-    """
-    # get ious for each predicted box and gt target
-    # get back an NxM tensor of IOUs
-    overlaps = bbox_overlaps(regions, gt_boxes, device)
-    # now get best prediction for each
-    best_score_pred, match_idxs_pred = torch.max(overlaps, dim=1)
-    # mask for the boxes with
-    ret = NEITHER*torch.ones(regions.size(0)).to(device).long()
-    mask = best_score_pred >= upper
-    # check for empty tensor
-    if match_idxs_pred[mask].size(0) > 0:
-        ret[mask] = match_idxs_pred[mask]
-    # now we need the highest iou wrt to each
-    # get back a vector indexed by gt_boxes which we need to
-    # index back to targets
-    best_score_gt, match_idxs_gt = torch.max(overlaps, dim=0)
-    ret[match_idxs_gt] = torch.arange(0, gt_boxes.size(0)).to(device)
-    # finally, for anything with max iou < lower add a negative value
-    mask = best_score_pred < lower
-    ret[mask] = NEGATIVE
-    return ret
 
 
 class AnchorTargetLayer(nn.Module):
