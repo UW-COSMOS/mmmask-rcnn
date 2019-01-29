@@ -55,7 +55,7 @@ def load_image(base_path, identifier, img_type):
     # reads in as [SIZE x SIZE x 3]
     img_data = io.imread(path)
     img_data = img_data.transpose((2, 0, 1))
-    img_data = torch.from_numpy(img_data)
+    img_data = torch.from_numpy(img_data).float()
     # squash values into [0,1]
     img_data = img_data / 255.0
     return img_data
@@ -115,4 +115,6 @@ class XMLLoader:
         if self.xml_dir is not None:
             gt = load_gt(self.xml_dir, identifier)
         proposals = load_proposal(self.proposal_dir, identifier)
-        return img, gt, proposals, identifier
+        if gt is not None:
+            return img, gt, proposals, identifier
+        return img, proposals, identifier

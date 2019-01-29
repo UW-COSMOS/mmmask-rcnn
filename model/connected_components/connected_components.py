@@ -16,8 +16,6 @@ from torch import nn
 from torch.nn import functional as F
 import matplotlib.pyplot as plt
 import os
-from model.nms.nms import nms
-
 
 
 def convert_image_to_binary_map(img):

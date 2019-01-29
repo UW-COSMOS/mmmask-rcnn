@@ -9,6 +9,7 @@ from os.path import join
 from torch import optim
 from torch.utils.data import DataLoader
 from tqdm import tqdm
+import yaml
 from train.anchor_targets.anchor_target_layer import AnchorTargetLayer
 from train.anchor_targets.head_target_layer import HeadTargetLayer
 from functools import partial

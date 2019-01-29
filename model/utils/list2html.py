@@ -44,7 +44,6 @@ def list2html(input_list, image_name, image_dir, output_dir):
                     # We do a quick loading and deloading to properly convert encodings
                     div(raw(b_text), id='hocr', data_coordinates=f'{coords[0]} {coords[1]} {coords[2]} {coords[3]}')
                 div(txt, id='rawtext')
-    with open(os.path.join(output_dir, f'{image_name[:-4]}.html'), 'w') as wf:
+    with open(os.path.join(output_dir, f'{image_name[:-4]}.html'), 'w', encoding='utf-8') as wf:
         wf.write(doc.render())
-    
     
