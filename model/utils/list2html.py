@@ -13,15 +13,14 @@ from dominate.util import raw
 
 
 def list2html(input_list, image_name, image_dir, output_dir):
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
-        os.makedirs(os.path.join(output_dir, 'img'))
     doc = dominate.document(title=image_name[:-4])
     img = Image.open(os.path.join(image_dir, image_name))
+    print(img.size)
     inter_path = os.path.join(output_dir, 'img', image_name[:-4])
     with doc:
         for ind, inp in enumerate(input_list):
             t, coords = inp
+            print(coords)
             input_id = str(t) + str(ind)
             cropped = img.crop(coords)
             if not os.path.exists(inter_path):

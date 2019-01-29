@@ -461,8 +461,6 @@ def non_max_suppression_fast(boxes, overlapThresh):
     return boxes[pick].astype("int")
 
 def write_proposals(img_p, output_dir='tmp/cc_proposals'):
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
     img = Image.open(img_p)
     thresh = 245
     fn = lambda x : 0 if x > thresh else 255
