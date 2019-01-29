@@ -13,9 +13,6 @@ from dominate.util import raw
 
 
 def list2html(input_list, image_name, image_dir, output_dir):
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
-        os.makedirs(os.path.join(output_dir, 'img'))
     doc = dominate.document(title=image_name[:-4])
     img = Image.open(os.path.join(image_dir, image_name))
     inter_path = os.path.join(output_dir, 'img', image_name[:-4])
