@@ -10,10 +10,11 @@ from utils.bbox_overlaps import bbox_overlaps
 from utils.generate_anchors import generate_anchors
 from train.losses.smooth_l1_loss import SmoothL1Loss
 from time import sleep
+from tensorboardX import SummaryWriter
 
 NEITHER = -1
 NEGATIVE = -2
-
+writer = SummaryWriter()
 
 def match(regions, gt_boxes, upper, lower,device):
     """
@@ -21,7 +22,7 @@ def match(regions, gt_boxes, upper, lower,device):
     :param regions: predicted regions [KA x 4]
     :param gt_boxes: [ M x 4]
     :return: [KA x 4] index to gt box of boxes which have either
-        a) an IOU of 0.7 or greater with a gt_box
+        a) an IOU of upper or greater with a gt_box
         b) the highest IOU for a given gt_box
 
 
@@ -63,6 +64,7 @@ class HeadTargetLayer(nn.Module):
         self.BACKGROUND =ncls 
         self.cls_loss = CrossEntropyLoss(reduction="mean")
         self.bbox_loss = SmoothL1Loss(1)
+        self.iter = 0
 
     def forward(self, rois, cls_scores, bbox_deltas, gt_boxes, gt_clses,device):
         """
@@ -103,6 +105,8 @@ class HeadTargetLayer(nn.Module):
         cls_loss = 0
         bbox_loss = 0
         
+        fg_num = 0.0
+        bg_num = 0.0
         rois = rois.reshape(1,-1,4)
         for idx, (gt_cls, gt_box) in enumerate(zip(gt_clses, gt_boxes)):
             pred_batch = pred[idx]
@@ -110,19 +114,25 @@ class HeadTargetLayer(nn.Module):
             matches = match(pred_batch, gt_box, self.upper, self.lower,device)
             pos_mask = matches >= 0
             pos_inds = pos_mask.nonzero()
+            fg_num += pos_mask.sum()
+            print(fg_num)
             neg_mask = matches == NEGATIVE
             neg_inds = neg_mask.nonzero()
-            # sample down
+            bg_num += neg_mask.sum()
+            print(bg_num)
             pos_inds = pos_inds.reshape(-1)
-            bg_num = torch.round(torch.tensor(pos_inds.size(0) * self.bg_ratio)).long() +1
-            perm = torch.randperm(neg_inds.size(0))
-            sample_neg_inds = perm[:bg_num].to(device)
+            neg_inds = neg_inds.reshape(-1)
             # build the positive labels
             gt_indxs = matches[pos_inds].long()
             pos_labels = gt_cls[gt_indxs].long()
-            neg_labels = self.BACKGROUND*torch.ones(sample_neg_inds.size(0)).long().to(device)
+            neg_labels = self.BACKGROUND*torch.ones(neg_inds.size(0)).long().to(device)
             gt_labels = torch.cat((pos_labels, neg_labels))
-            pred_scores = torch.cat((cls_scores[idx,pos_inds, :], cls_scores[idx,sample_neg_inds, :]))
+            pred_scores = torch.cat((cls_scores[idx,pos_inds, :], cls_scores[idx,neg_inds, :]))
+            #get logging info for non-bg classes
+            max_scores, max_idxs = torch.max(cls_scores, dim=2)
+            pos_pred_mask = max_idxs != self.BACKGROUND
+            writer.add_scalar('pos_preds', pos_pred_mask.sum(),self.iter)
+            self.iter = self.iter + 1
             l = self.cls_loss(pred_scores, gt_labels)
             cls_loss = l + cls_loss 
             # now we can compute the bbox loss
@@ -134,4 +144,4 @@ class HeadTargetLayer(nn.Module):
             batch_bbox_loss = self.bbox_loss(sample_pred_bbox, gt_bbox,sample_roi_bbox, N)
             if batch_bbox_loss == batch_bbox_loss:
                 bbox_loss = bbox_loss + batch_bbox_loss
-        return cls_loss, bbox_loss
+        return cls_loss, bbox_loss,fg_num, bg_num

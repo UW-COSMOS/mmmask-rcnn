@@ -33,7 +33,7 @@ def mapper(obj):
     h = y2 - y1
     # get centers
     x = x1 + w/2
-    y = y1 + h/w
+    y = y1 + h/2
     return obj.find("name").text, (x, y, w, h)
 
 

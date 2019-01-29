@@ -95,8 +95,11 @@ class TrainerHelper:
                             pin_memory=True,
                             shuffle=True,
                             )
+        eps = 0.1
         batch_cls_loss = 0
         batch_bbox_loss = 0
+        fg_num = 0
+        bg_num = 0 + eps
         iter = 0
         for epoch in tqdm(range(self.params["EPOCHS"]),desc="epochs"):
             for idx, batch in enumerate(tqdm(loader, desc="batches", leave=False)):
@@ -109,7 +112,7 @@ class TrainerHelper:
                 # forward pass
                 rois, cls_preds, cls_scores, bbox_deltas = self.model(ex, self.device, proposals=proposals)
                 # calculate losses
-                cls_loss, bbox_loss = self.head_target_layer(rois[0].unsqueeze(0).to(self.device).float(),
+                cls_loss, bbox_loss,fg_num, bg_num = self.head_target_layer(rois[0].unsqueeze(0).to(self.device).float(),
                         cls_scores, bbox_deltas, gt_box, gt_cls, self.device)
                 # update batch losses, cast as float so we don't keep gradient history
                 batch_cls_loss += float(cls_loss)
@@ -118,9 +121,12 @@ class TrainerHelper:
                     self.output_batch_losses(
                                              batch_cls_loss,
                                              batch_bbox_loss,
+                                             fg_num/bg_num,
                                              iter) 
                     batch_cls_loss = 0
                     batch_bbox_loss = 0
+                    bg_num = 0 + eps
+                    fg_num = 0
                     iter += 1
                 loss = cls_loss + bbox_loss
                 loss.backward()
@@ -131,7 +137,7 @@ class TrainerHelper:
                 path = join(self.params["SAVE_DIR"], name)
                 torch.save(self.model.state_dict(), path)
 
-    def output_batch_losses(self,  cls_loss, bbox_loss, iter ):
+    def output_batch_losses(self,  cls_loss, bbox_loss,ratio, iter ):
         """
         output either by priting or to tensorboard
         :param rpn_cls_loss:
@@ -144,6 +150,7 @@ class TrainerHelper:
             vals = {
                 "bbox_loss": bbox_loss,
                 "cls_loss": cls_loss,
+                "fg_bg_ratio": ratio
             }
             for key in vals:
                 self.writer.add_scalar(key, vals[key], iter)
