@@ -36,6 +36,8 @@ def model2xml(name, output_dir, size, rois, class_names, scores, roi_score_tres=
     for ind, roi in enumerate(rois):
         # Only write scores above the provided treshold
         score = scores[ind]
+        if roi[0] >= len(class_names):
+            continue
         cl_name = class_names[roi[0]]
         pts = roi[1]	
         writer.addObject(cl_name, *pts)
