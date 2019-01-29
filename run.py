@@ -56,16 +56,16 @@ def convert_to_html(xml_f):
 
 pool = mp.Pool(processes=240)
 results = [pool.apply_async(preprocess_pdfs, args=(x,)) for x in os.listdir(args.pdfdir)]
-[r.get() for r in tqdm(results)]
+[r.get() for r in results]
 
 results = [pool.apply_async(flatten_png, args=(x,)) for x in os.listdir(os.path.join('tmp', 'images'))]
-[r.get() for r in tqdm(results)]
+[r.get() for r in results]
 
-results = [pool.apply_async(write_proposals, args=(os.path.join(img_d, x),)) for x in os.listdir(os.path.join('tmp', 'images'))]
-[r.get() for r in tqdm(results)]
+results = [pool.apply_async(write_proposals, args=(os.path.join('tmp', 'images', x),)) for x in os.listdir(os.path.join('tmp', 'images'))]
+[r.get() for r in results]
 
 results = [pool.apply_async(preprocess_pngs, args=(x,)) for x in os.listdir(os.path.join('tmp', 'images'))]
-[r.get() for r in tqdm(results)]
+[r.get() for r in results]
 
 with open('test.txt', 'w') as wf:
     for f in os.listdir('tmp/images'):
@@ -120,7 +120,7 @@ for idx, batch in enumerate(tqdm(loader, desc="batches", leave=False)):
     
 #[convert_to_html(x) for x in os.listdir('xml')]
 results = [pool.apply_async(convert_to_html, args=(x,)) for x in os.listdir('xml')]
-[r.get() for r in tqdm(results)]
+[r.get() for r in results]
 #shutil.rmtree('xml')
 #shutil.rmtree('tmp')
 
