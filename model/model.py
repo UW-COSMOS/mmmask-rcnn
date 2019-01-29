@@ -75,6 +75,7 @@ class MMFasterRCNN(nn.Module):
         for batch_el in range(N):
             rois = proposals[batch_el].to(device).float()
             # add fake scores
+            rois = rois.reshape(-1, 4)
             L, _ = rois.shape
             fake_rois = torch.zeros(L,5).to(device)
             fake_rois[:, 1:] = rois

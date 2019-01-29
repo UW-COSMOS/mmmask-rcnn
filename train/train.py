@@ -15,6 +15,8 @@ from functools import partial
 import bitmath
 from .scheduler import Scheduler
 from tensorboardX import SummaryWriter
+from .data_layer.transforms import NormalizeWrapper
+import torchvision.transforms as transform
 
 
 def unpack_cls(cls_dict, gt_list):
@@ -77,13 +79,15 @@ class TrainerHelper:
 
 
     def train(self):
+        self.model.train(mode=True)
         optimizer = optim.Adam(self.model.parameters(), lr=self.params["LEARNING_RATE"],
                               weight_decay=self.params["WEIGHT_DECAY"])
         loader = DataLoader(self.dataset,
                             batch_size=self.params["BATCH_SIZE"],
                             collate_fn=partial(collate,cls_dict=self.cls),
                             pin_memory=True,
-                            shuffle=True)
+                            shuffle=True,
+                            )
         batch_cls_loss = 0
         batch_bbox_loss = 0
         iter = 0

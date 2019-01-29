@@ -59,7 +59,7 @@ class HeadTargetLayer(nn.Module):
         self.lower = lower
         self.bg_ratio = bg_ratio
         self.anchors = None
-        self.BACKGROUND = ncls
+        self.BACKGROUND =ncls 
         self.cls_loss = CrossEntropyLoss(reduction="mean")
         self.bbox_loss = SmoothL1Loss(10)
 
@@ -101,6 +101,8 @@ class HeadTargetLayer(nn.Module):
         # Now produce matches [L x 1]
         cls_loss = 0
         bbox_loss = 0
+        
+        rois = rois.reshape(1,-1,4)
         for idx, (gt_cls, gt_box) in enumerate(zip(gt_clses, gt_boxes)):
             pred_batch = pred[idx]
             gt_box = gt_box.squeeze(0)

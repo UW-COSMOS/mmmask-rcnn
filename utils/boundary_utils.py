@@ -21,7 +21,7 @@ def absolute_coords(bboxes, device):
     coords_bbox[:, Y2] = bboxes[:, Y] + bboxes[:, H] / 2
     return coords_bbox
 
-def centers_size(bbox_coords, device):
+def centers_size(bbox_coords, device=torch.device("cpu")):
     """
     convert from absolute coords to (center_x, center_y,h, w)
     :param bboxes: [L x (X1, Y1, X2, Y2)]

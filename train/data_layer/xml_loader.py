@@ -7,9 +7,17 @@ import os
 from os.path import splitext
 from skimage import io
 from numpy import genfromtxt
+from utils.boundary_utils import centers_size
 import torch
 from xml.etree import ElementTree as ET
+from .transforms import NormalizeWrapper
 
+
+normalizer = NormalizeWrapper(mean=[0.485, 0.456, 0.406],
+        std=[0.229, 0.224, 0.225])
+
+
+                                                                        
 
 def mapper(obj):
     """
@@ -55,19 +63,21 @@ def load_image(base_path, identifier, img_type):
     # reads in as [SIZE x SIZE x 3]
     img_data = io.imread(path)
     img_data = img_data.transpose((2, 0, 1))
-    img_data = torch.from_numpy(img_data)
+    img_data = torch.from_numpy(img_data).float()
     # squash values into [0,1]
     img_data = img_data / 255.0
+    img_data = normalizer(img_data)
     return img_data
 
 def load_proposal(base_path, identifier):
-	"""
-	Load a set of proposals into memory
-	
-	"""
-	path = os.path.join(base_path, f"{identifier}.csv")
-	np_arr = genfromtxt(path, delimiter=",")
-	return torch.from_numpy(np_arr)
+    """
+    Load a set of proposals into memory
+
+    """
+    path = os.path.join(base_path, f"{identifier}.csv")
+    np_arr = genfromtxt(path, delimiter=",")
+    bbox_absolute = torch.from_numpy(np_arr).reshape(-1,4)
+    return bbox_absolute
 
 def load_gt(xml_dir, identifier):
     """
