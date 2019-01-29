@@ -34,12 +34,15 @@ if not os.path.exists('tmp'):
     os.makedirs('tmp')
     os.makedirs('tmp/images')
     os.makedirs('tmp/images2')
+    os.makedirs('tmp/cc_proposals')
 if not os.path.exists('xml'):
     os.makedirs('xml')
+if not os.path.exists('html'):
+    os.makedirs('html/img')
 
 img_d = os.path.join('tmp', 'images2')
 def preprocess_pdfs(pdf_path):
-    subprocess.run(['convert', '-density', '200', '-trim', os.path.join(args.pdfdir, pdf_path), '-quality', '100',
+    subprocess.run(['convert', '-density', '100', '-trim', os.path.join(args.pdfdir, pdf_path), '-quality', '100',
                     '-sharpen', '0x1.0', os.path.join('tmp','images', f'{pdf_path}-%04d.png')])
 
 def flatten_png(img_f):
@@ -47,12 +50,13 @@ def flatten_png(img_f):
 
 def preprocess_pngs(img_f):
     pth, padded_img = pp.pad_image(os.path.join('tmp', 'images', img_f))
-    padded_img.save(os.path.join(img_d, img_f))
+    if pth is not None:
+        padded_img.save(os.path.join(img_d, img_f))
 
 def convert_to_html(xml_f):
     xpath = os.path.join('xml', xml_f)
     l = xml2list(xpath)
-    list2html(l, f'{xml_f[:-4]}.png', 'tmp/images', 'html')
+    list2html(l, f'{xml_f[:-4]}.png', img_d, 'html')
 
 pool = mp.Pool(processes=240)
 results = [pool.apply_async(preprocess_pdfs, args=(x,)) for x in os.listdir(args.pdfdir)]
@@ -112,7 +116,7 @@ for idx, batch in enumerate(tqdm(loader, desc="batches", leave=False)):
             bbox_lst.append(bbox_deltas[img_idx, roi_idx, cls_idx, :])
     bbox_deltas = torch.stack(bbox_lst)
     bbox_deltas = bbox_deltas.reshape(N, L, 4)
-    pred_box = rois.double().to(device) + bbox_deltas.double().to(device)
+    pred_box = rois.double().to(device)# + bbox_deltas.double().to(device)
     zipped = zip(clss, pred_box[0].int().tolist())
     
     model2xml(idn[0], 'xml', [1920, 1920], zipped, classes, max_scores[0])
