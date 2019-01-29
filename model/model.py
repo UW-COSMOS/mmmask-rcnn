@@ -98,6 +98,8 @@ class MMFasterRCNN(nn.Module):
                 # skip convolutional layers
                 if w.requires_grad:
                     nn.init.normal_(w, mean, std)
+                    if hasattr(parm, "bias") and not (parm.bias is None) :
+                        nn.init.constant_(parm.bias, 0)
 
                 
 

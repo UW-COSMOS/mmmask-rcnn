@@ -18,7 +18,7 @@ from .scheduler import Scheduler
 from tensorboardX import SummaryWriter
 from .data_layer.transforms import NormalizeWrapper
 import torchvision.transforms as transform
-
+from utils.boundary_utils import centers_size
 
 def unpack_cls(cls_dict, gt_list):
     arr = map(lambda x: cls_dict[x], gt_list)
@@ -57,6 +57,10 @@ def format(bytes):
     return bitmath.Byte(bytes).to_GiB()
 
 
+def prep_gt_boxes(boxes, device):
+    boxes = [box.reshape(-1, 4).float().to(device) for box in boxes]
+    boxes = [box.reshape(1,-1,4) for box in boxes]
+    return boxes
 
 class TrainerHelper:
     def __init__(self, model, dataset, params,device):
@@ -76,7 +80,9 @@ class TrainerHelper:
         self.head_target_layer = HeadTargetLayer(model.ratios,
                                      model.scales,
                                      model.img_size,
-                                     ncls=len(model.cls_names)).to(device)
+                                     ncls=len(model.cls_names),
+                                     upper=params["RPN"]["UPPER"],
+                                     lower=params["RPN"]["LOWER"]).to(device)
 
 
     def train(self):
@@ -95,15 +101,16 @@ class TrainerHelper:
         for epoch in tqdm(range(self.params["EPOCHS"]),desc="epochs"):
             for idx, batch in enumerate(tqdm(loader, desc="batches", leave=False)):
                 optimizer.zero_grad()
-                ex, gt_box, gt_cls, proposals, _ = batch
+                ex, gt_box, gt_cls, proposals = batch
                 ex = ex.to(self.device)
                 gt_box = gt_box
                 gt_cls = [gt.to(self.device) for gt in gt_cls]
-                gt_box = [gt.reshape(1, -1, 4).float().to(self.device) for gt in gt_box]
+                gt_box = prep_gt_boxes(gt_box, self.device)
                 # forward pass
                 rois, cls_preds, cls_scores, bbox_deltas = self.model(ex, self.device, proposals=proposals)
                 # calculate losses
-                cls_loss, bbox_loss = self.head_target_layer(rois[0].unsqueeze(0).to(self.device).float(), cls_scores, bbox_deltas, gt_box, gt_cls, self.device)
+                cls_loss, bbox_loss = self.head_target_layer(rois[0].unsqueeze(0).to(self.device).float(),
+                        cls_scores, bbox_deltas, gt_box, gt_cls, self.device)
                 # update batch losses, cast as float so we don't keep gradient history
                 batch_cls_loss += float(cls_loss)
                 batch_bbox_loss += float(bbox_loss)

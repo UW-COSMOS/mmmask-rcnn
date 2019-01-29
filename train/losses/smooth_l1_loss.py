@@ -19,6 +19,7 @@ class SmoothL1Loss(nn.Module):
         super(SmoothL1Loss, self).__init__()
         self.lamb = lamb
         self.reduce = reduce
+        self.smooth_l1 = nn.SmoothL1Loss()
 
     """
     all tensors are indexed by [L, x, y, h, w]
@@ -43,17 +44,10 @@ class SmoothL1Loss(nn.Module):
         gt_h = torch.log(gt[:, H]/roi[:, H])
         t = torch.stack((t_x, t_y, t_h, t_w))
         gt = torch.stack((gt_x, gt_y, gt_h, gt_w))
-        box_diff = t - gt
-        box_diff = torch.abs(box_diff)
-        # print(f"box_diff: {box_diff}")
-        signs = (box_diff < 1).detach().float()
-        signs_inv = (box_diff >= 1).detach().float()
-        smooth_l1 = (torch.pow(box_diff,2) * 0.5 * signs) + ((box_diff - 0.5) * signs_inv)
-        # sum along 3rd dim
-        smooth_l1 = smooth_l1.sum(1)
-        smooth_l1 = smooth_l1.sum()/norm
-        return self.lamb*smooth_l1
-
+        #print(t,gt)
+        loss = self.smooth_l1(t,gt)
+        return self.lamb*loss
+        
 
 
 

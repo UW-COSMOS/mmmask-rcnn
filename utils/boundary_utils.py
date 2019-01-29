@@ -29,7 +29,7 @@ def centers_size(bbox_coords, device=torch.device("cpu")):
     """
     bbox_coords = bbox_coords.clone()
     L, _ = bbox_coords.shape
-    bboxes = torch.ones(L, 4)
+    bboxes = torch.ones(L, 4).to(device)
     bboxes[:, X] = (bbox_coords[:, X] + bbox_coords[:, X2])/2.0
     bboxes[:, Y] = (bbox_coords[:, Y] + bbox_coords[:, Y2])/2.0
     bboxes[:, W] = (bbox_coords[:, X2] - bbox_coords[:, X])

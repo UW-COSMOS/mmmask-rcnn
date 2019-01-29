@@ -45,6 +45,7 @@ def match(regions, gt_boxes, upper, lower,device):
     # finally, for anything with max iou < lower add a negative value
     mask = best_score_pred < lower
     ret[mask] = NEGATIVE
+    mask = ret >= 0
     return ret
 
 
@@ -61,7 +62,7 @@ class HeadTargetLayer(nn.Module):
         self.anchors = None
         self.BACKGROUND =ncls 
         self.cls_loss = CrossEntropyLoss(reduction="mean")
-        self.bbox_loss = SmoothL1Loss(10)
+        self.bbox_loss = SmoothL1Loss(1)
 
     def forward(self, rois, cls_scores, bbox_deltas, gt_boxes, gt_clses,device):
         """
@@ -130,5 +131,7 @@ class HeadTargetLayer(nn.Module):
             gt_bbox = gt_box[gt_indxs, :]
             gt_bbox = gt_bbox.reshape(-1,4)
             # no normalization happens at the head
-            bbox_loss = bbox_loss + self.bbox_loss(sample_pred_bbox, gt_bbox,sample_roi_bbox, N)
+            batch_bbox_loss = self.bbox_loss(sample_pred_bbox, gt_bbox,sample_roi_bbox, N)
+            if batch_bbox_loss == batch_bbox_loss:
+                bbox_loss = bbox_loss + batch_bbox_loss
         return cls_loss, bbox_loss
