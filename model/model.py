@@ -12,6 +12,7 @@ from model.roi.roi_pool import ROIPool
 from model.roi.roi_align import ROIAlign
 from utils.memory import get_gpu_mem
 from model.connected_components import connected_components as cc
+from utils.boundary_utils import absolute_coords
 class MMFasterRCNN(nn.Module):
     def __init__(self, kwargs):
         """
@@ -23,7 +24,7 @@ class MMFasterRCNN(nn.Module):
         self.img_size = kwargs["IMG_SIZE"]
         self.scales = kwargs["SCALES"]
         self.ratios = kwargs["RATIOS"]
-        self.backbone = get_backbone(kwargs["BACKBONE"])
+        self.backbone, self.shared_layer = get_backbone(kwargs["BACKBONE"])
 
         # size should be informed at least partially by the receptive field
         # ensure this is meant to be a free parameter
@@ -71,13 +72,20 @@ class MMFasterRCNN(nn.Module):
         """
         N = img.size(0)
         feature_map = self.backbone.forward(img)
+        feature_map = self.shared_layer(feature_map)
         if self.RPN is not None:
             rpn_cls_branch_preds, rpn_cls_branch_scores, rpn_bbox_branch =\
                 self.RPN(feature_map)
             rois = self.proposal_layer(rpn_cls_branch_preds, rpn_bbox_branch, device)
+            # convert to absolute coords
+            rois_absolute = rois
+            N, L, _ = rois_absolute.shape
+            rois_absolute = rois_absolute.reshape(-1, 5)
+            rois_absolute[:, 1:] = absolute_coords(rois_absolute[:, 1:], device)
+            rois_absolute = rois_absolute.reshape(N, L, 5)
             maps = []
             for batch_el in range(N):
-                map = self.ROI_pooling(feature_map, rois[batch_el])
+                map = self.ROI_pooling(feature_map, rois_absolute[batch_el])
                 maps.append(map)
             maps = torch.stack(maps)
         else:
@@ -88,13 +96,17 @@ class MMFasterRCNN(nn.Module):
 
 
     def set_weights(self,mean, std):
-        for parm in self.modules():
-            if not hasattr(parm, "weight"):
+        for child in self.children():
+            if child == self.shared_layer:
+                print("skipping shared layer")
                 continue
-            w = parm.weight
-            # skip convolutional layers
-            if w.requires_grad:
-                nn.init.normal_(w, mean, std)
+            for parm in self.modules():
+                if not hasattr(parm, "weight"):
+                    continue
+                w = parm.weight
+                if w.requires_grad:
+                    nn.init.normal_(w, mean, std)
+  
 
                 
 

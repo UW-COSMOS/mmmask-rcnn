@@ -60,7 +60,6 @@ class AnchorTargetLayer(nn.Module):
         self.lower = lower
         self.sample_num = sample_num
         self.anchors = None
-        self.cls_loss = BCEWithLogitsLoss(reduction="mean")
         self.bbox_loss = SmoothL1Loss(0.1)
 
     def forward(self, cls_scores, bbox_deltas, gt_boxes, device):
@@ -135,13 +134,10 @@ class AnchorTargetLayer(nn.Module):
             gt_cls = torch.cat((torch.ones(pos_inds.size(0)), torch.zeros(sample_neg_inds.size(0)))).to(device)
             # grab cls_scores from each point
             pred_cls = torch.cat((cls_scores[i,pos_inds], cls_scores[i,sample_neg_inds])).to(device).squeeze()
-            # TODO avoid this reshape edge case
             gt_cls = gt_cls.reshape(-1)
             pred_cls = pred_cls.reshape(-1)
-            cls_loss = self.cls_loss(pred_cls, gt_cls.reshape(-1))
-            if cls_loss != cls_loss:
-                print(f"pred_cls: {pred_cls}")
-                print(f"gt_cls: {gt_cls}")
+            bce_loss = BCEWithLogitsLoss(reduction="mean")
+            cls_loss = bce_loss(pred_cls, gt_cls)
             # we only do bbox regression on positive targets
             # get and reshape matches
             gt_indxs = matches[pos_inds].long()

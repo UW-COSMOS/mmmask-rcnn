@@ -8,7 +8,11 @@ from os.path import splitext
 from skimage import io
 import torch
 from xml.etree import ElementTree as ET
+from torchvision.transforms import Normalize
 
+normalizer = Normalize(mean=[0.485, 0.456, 0.406],
+        std=[0.229, 0.224, 0.225]
+        )
 
 def mapper(obj):
     """
@@ -54,9 +58,10 @@ def load_image(base_path, identifier, img_type):
     # reads in as [SIZE x SIZE x 3]
     img_data = io.imread(path)
     img_data = img_data.transpose((2, 0, 1))
-    img_data = torch.from_numpy(img_data)
+    img_data = torch.from_numpy(img_data).float()
     # squash values into [0,1]
     img_data = img_data / 255.0
+    img_data = normalizer(img_data)
     return img_data
 
 
