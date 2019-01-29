@@ -41,9 +41,9 @@ img_d = os.path.join('tmp', 'images2')
 def preprocess_pdfs(pdf_path):
     subprocess.run(['convert', '-density', '200', '-trim', os.path.join(args.pdfdir, pdf_path), '-quality', '100',
                     '-sharpen', '0x1.0', os.path.join('tmp','images', f'{pdf_path}-%04d.png')])
+    subprocess.run(['convert', '-flatten', os.path.join('tmp', 'images', img_f), os.path.join('tmp', 'images', img_f)])
 
 def preprocess_pngs(img_f):
-    subprocess.run(['convert', '-flatten', os.path.join('tmp', 'images', img_f), os.path.join('tmp', 'images', img_f)])
     pth, padded_img = pp.pad_image(os.path.join('tmp', 'images', img_f))
     padded_img.save(os.path.join(img_d, img_f))
 
@@ -56,10 +56,10 @@ pool = mp.Pool(processes=240)
 results = [pool.apply_async(preprocess_pdfs, args=(x,)) for x in os.listdir(args.pdfdir)]
 [r.get() for r in tqdm(results)]
 
+results = [pool.apply_async(write_proposals, args=(os.path.join(img_d, x),)) for x in os.listdir(os.path.join('tmp', 'images')]
+[r.get() for r in tqdm(results)]
 
 results = [pool.apply_async(preprocess_pngs, args=(x,)) for x in os.listdir(os.path.join('tmp', 'images'))]
-[r.get() for r in tqdm(results)]
-results = [pool.apply_async(write_proposals, args=(os.path.join(img_d, x),)) for x in os.listdir(img_d)]
 [r.get() for r in tqdm(results)]
 
 with open('test.txt', 'w') as wf:
@@ -68,7 +68,7 @@ with open('test.txt', 'w') as wf:
 
 shutil.move('test.txt', 'tmp/test.txt')
 
-loader = XMLLoader(None, img_d, 'tmp/cc_proposals', 'png')
+loader = XMLLoader(None, img_d, 'cc_proposals', 'png')
 dataset = GTDataset(loader)
 loader = DataLoader(dataset, batch_size=1)
 device = None
