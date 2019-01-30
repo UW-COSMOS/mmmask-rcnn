@@ -16,7 +16,6 @@ def match(regions, gt_boxes, upper, lower, device,):
     # get ious for each predicted box and gt target
     # get back an NxM tensor of IOUs
     overlaps = bbox_overlaps(regions, gt_boxes, device)
-    print(overlaps)
     # now we need the highest iou wrt to each
     # get back a vector indexed by gt_boxes which we need to
     # index back to targets

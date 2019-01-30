@@ -77,6 +77,7 @@ def pad_image(path, image=None, size=1920):
     im_2 = ImageOps.expand(im, padding, fill="#fff")
     return path,im_2
 
+
 def resize_image(im, new_h):
     w,h = im.size
     if h > w:

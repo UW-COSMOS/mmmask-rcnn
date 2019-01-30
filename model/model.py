@@ -27,26 +27,6 @@ class MMFasterRCNN(nn.Module):
 
         # size should be informed at least partially by the receptive field
         # ensure this is meant to be a free parameter
-        if kwargs["PROPOSAL"]["METHOD"] == "RPN":
-            self.RPN = RPN(
-                self.backbone.output_depth,
-                kwargs["RPN"]["DEPTH"],
-                kwargs["RATIOS"],
-                kwargs["SCALES"],
-                kwargs["RPN"]["WINDOW_SIZE"]
-            )
-            self.proposal_layer = ProposalLayer(
-                kwargs["RATIOS"],
-                kwargs["SCALES"],
-                kwargs["IMG_SIZE"],
-                kwargs["PROPOSAL"]["NMS_PRE"],
-                kwargs["PROPOSAL"]["NMS_POST"],
-                kwargs["PROPOSAL"]["MIN_SIZE"],
-                kwargs["PROPOSAL"]["NMS_THRESHOLD"]
-            )
-        else:
-            self.RPN = None
-            self.proposal_layer = cc.get_proposals
         output_size = (kwargs["ROI_POOL"]["OUTPUT_SIZE"],kwargs["ROI_POOL"]["OUTPUT_SIZE"])
         self.ROI_pooling = ROIAlign(
             output_size,
@@ -97,7 +77,7 @@ class MMFasterRCNN(nn.Module):
                 w = parm.weight
                 # skip convolutional layers
                 if w.requires_grad:
-                    nn.init.normal_(w, mean, std)
+                    nn.init.normal_(w,mean, std)
                     if hasattr(parm, "bias") and not (parm.bias is None) :
                         nn.init.constant_(parm.bias, 0)
 
