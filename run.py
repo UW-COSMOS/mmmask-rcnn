@@ -108,12 +108,15 @@ model.to(device)
 
 if not os.path.exists('xml'):
     os.makedirs('xml')
-classes = list(ICDAR_convert.keys())
+#classes = list(ICDAR_convert.keys())
+classes =  ["Section Header", "Body Text", "Figure", "Figure Caption", "Table", "Equation",
+            "Page Footer", "Page Header", "Table Caption", "Table Note", "Abstract", "Other", "Equation label", "Reference text", "Figure Note"]
 for idx, batch in enumerate(tqdm(loader, desc="batches", leave=False)):
     ex, proposals, idn = batch
     ex = ex.to(device)
     rois, cls_preds, cls_scores, bbox_deltas = model(ex, device, proposals=proposals)
     N, L, C = cls_scores.shape
+    cls_scores = cls_scores[:, :, :-1]
     # ensure center and original anchors have been precomputed
     # drop objectness score
     max_scores, score_idxs = torch.max(cls_scores, dim=2)
