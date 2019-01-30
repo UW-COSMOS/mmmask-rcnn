@@ -6,14 +6,12 @@ Author: Josh McGrath
 import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
-from utils.bbox_overlaps import bbox_overlaps
+from utils.matcher import match, NEGATIVE
 from utils.generate_anchors import generate_anchors
 from train.losses.smooth_l1_loss import SmoothL1Loss
 from time import sleep
 from tensorboardX import SummaryWriter
 
-NEITHER = -1
-NEGATIVE = -2
 writer = SummaryWriter()
 
 
@@ -69,7 +67,7 @@ class HeadTargetLayer(nn.Module):
         bbox_deltas = torch.stack(bbox_lst)
         bbox_deltas = bbox_deltas.reshape(N, L, 4)
         # now we can apply the bbox deltas to the RoIs
-        pred = rois + bbox_deltas
+        pred = rois +bbox_deltas
         # Now produce matches [L x 1]
         cls_loss = 0
         bbox_loss = 0
@@ -84,13 +82,15 @@ class HeadTargetLayer(nn.Module):
             pos_mask = matches >= 0
             pos_inds = pos_mask.nonzero()
             fg_num += pos_mask.sum()
-            print(fg_num)
             neg_mask = matches == NEGATIVE
             neg_inds = neg_mask.nonzero()
-            bg_num += neg_mask.sum()
-            print(bg_num)
+            sample_num = min( neg_mask.sum(),1 ) 
+            bg_num += sample_num
             pos_inds = pos_inds.reshape(-1)
             neg_inds = neg_inds.reshape(-1)
+            #sample down the negative points
+            perm = torch.randperm(neg_inds.size(0))
+            neg_inds = neg_inds[perm[:sample_num]]
             # build the positive labels
             gt_indxs = matches[pos_inds].long()
             pos_labels = gt_cls[gt_indxs].long()
@@ -99,8 +99,6 @@ class HeadTargetLayer(nn.Module):
             pred_scores = torch.cat((cls_scores[idx,pos_inds, :], cls_scores[idx,neg_inds, :]))
             #get logging info for non-bg classes
             max_scores, max_idxs = torch.max(cls_scores, dim=2)
-            pos_pred_mask = max_idxs != self.BACKGROUND
-            writer.add_scalar('pos_preds', pos_pred_mask.sum(),self.iter)
             self.iter = self.iter + 1
             l = self.cls_loss(pred_scores, gt_labels)
             cls_loss = l + cls_loss 
