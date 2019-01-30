@@ -42,8 +42,15 @@ if not os.path.exists('html'):
 
 img_d = os.path.join('tmp', 'images2')
 def preprocess_pdfs(pdf_path):
-    subprocess.run(['convert', '-density', '100', '-trim', os.path.join(args.pdfdir, pdf_path), '-quality', '100',
-                    '-sharpen', '0x1.0', os.path.join('tmp','images', f'{pdf_path}-%04d.png')])
+    subprocess.run(['gs', '-dBATCH', '-dNOPAUSE', '-sDEVICE=png16m', '-dGraphicsAlphaBits=4',
+                    '-dTextAlphaBits=4', '-r600', f'-sOutputFile="tmp/images/{pdf_path}_%d.png"', os.path.join(args.pdfdir, pdf_path)])
+    #subprocess.run(['convert', '-density', '100', '-trim', os.path.join(args.pdfdir, pdf_path), '-quality', '100',
+    #                '-sharpen', '0x1.0', os.path.join('tmp','images', f'{pdf_path}-%04d.png')])
+
+def resize_pngs(img_path):
+    path, im = pp.resize_png(os.path.join('tmp', 'images', img_path))
+    if path is not None:
+        im.save(os.path.join('tmp', 'images', img_path))
 
 def flatten_png(img_f):
     subprocess.run(['convert', '-flatten', os.path.join('tmp', 'images', img_f), os.path.join('tmp', 'images', img_f)])
@@ -62,12 +69,18 @@ pool = mp.Pool(processes=240)
 results = [pool.apply_async(preprocess_pdfs, args=(x,)) for x in os.listdir(args.pdfdir)]
 [r.get() for r in results]
 
-results = [pool.apply_async(flatten_png, args=(x,)) for x in os.listdir(os.path.join('tmp', 'images'))]
+results = [pool.apply_async(resize_pngs, args=(x,)) for x in os.listdir(os.path.join('tmp', 'images'))]
 [r.get() for r in results]
 
+#results = [pool.apply_async(flatten_png, args=(x,)) for x in os.listdir(os.path.join('tmp', 'images'))]
+#[r.get() for r in results]
+
+print('Begin writing proposals')
+#[write_proposals(os.path.join('tmp', 'images', x)) for x in os.listdir(os.path.join('tmp', 'images'))]
 results = [pool.apply_async(write_proposals, args=(os.path.join('tmp', 'images', x),)) for x in os.listdir(os.path.join('tmp', 'images'))]
 [r.get() for r in results]
 
+print('Begin preprocessing pngs')
 results = [pool.apply_async(preprocess_pngs, args=(x,)) for x in os.listdir(os.path.join('tmp', 'images'))]
 [r.get() for r in results]
 

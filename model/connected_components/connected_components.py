@@ -575,10 +575,12 @@ def write_proposals(img_p, output_dir='tmp/cc_proposals'):
     for key in block_coords2:
         coords_list = block_coords2[key]
         for ind2, bc in enumerate(coords_list):
-            for bc2 in coords_list[ind2:]:
-                tl_y1, tl_x1, br_y1, br_x1 = bc
-                tl_y2, tl_x2, br_y2, br_x2 = bc2
-                block_coords.add((min(tl_x1, tl_x2), min(tl_y1, tl_y2), max(br_x1, br_x2), max(br_y1, br_y2)))
+            tl_y1, tl_x1, br_y1, br_x1 = bc
+            block_coords.add((tl_x1, tl_y1, br_x1, br_y1))
+            #for bc2 in coords_list[ind2:]:
+            #    tl_y1, tl_x1, br_y1, br_x1 = bc
+            #    tl_y2, tl_x2, br_y2, br_x2 = bc2
+            #    block_coords.add((min(tl_x1, tl_x2), min(tl_y1, tl_y2), max(br_x1, br_x2), max(br_y1, br_y2)))
     block_coords = list(block_coords)
     img_p = os.path.basename(img_p)
     write_p = os.path.join(output_dir, img_p[:-4] + '.csv')
@@ -845,7 +847,8 @@ def test_get_columns_for_row():
 
 if __name__ == '__main__':
     pool = mp.Pool(processes=240)
-    results = [pool.apply(write_proposals, args=(os.path.join('img',x),)) for x in os.listdir('img')]
+    results = [pool.apply_async(write_proposals, args=(os.path.join('img',x),)) for x in os.listdir('img')]
+    [r.get() for r in results]
     print(results)
     #test_divide_row_into_columns()
     #test_get_columns_for_row()
