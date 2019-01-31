@@ -10,29 +10,41 @@ from utils.matcher import match, NEGATIVE
 from utils.generate_anchors import generate_anchors
 from train.losses.smooth_l1_loss import SmoothL1Loss
 from time import sleep
-from tensorboardX import SummaryWriter
 from utils.matcher import match
 
-writer = SummaryWriter()
 
+def balance(gt_labels, ncls):
+    """
+    downsample from classes 
+    in order to do balanced training samples
+    """
+    ret = []
+    for cls in range(ncls):
+        mask = gt_labels == cls
+        nex = mask.sum()
+        idxs = mask.nonzero()
+        if nex == 0:
+            continue
+        sample_num = max(1, float(gt_labels.size(0)/ncls))
+        sample_num = torch.ceil(torch.tensor(sample_num).float()).long()
+        sample_idxs = list(idxs[:sample_num])
+        ret.extend(sample_idxs)
+    ret = torch.stack(ret).squeeze(1)
+    return ret
 
 
 
 class HeadTargetLayer(nn.Module):
-    def __init__(self, ratios, scales, image_size=1920, upper=0.4, lower=0.1, bg_ratio=1.0, ncls=1):
+    def __init__(self, upper=0.4, lower=0.1, bg_ratio=1.0, ncls=1):
         super(HeadTargetLayer, self).__init__()
-        self.feat_stride = None
-        self.ratios = ratios
-        self.scales = scales
-        self.image_size = image_size
         self.upper = upper
         self.lower = lower
         self.bg_ratio = bg_ratio
         self.anchors = None
-        self.BACKGROUND =ncls 
+        self.ncls = ncls
+        print(f"there are {ncls} classes")
         self.cls_loss = CrossEntropyLoss(reduction="mean")
         self.bbox_loss = SmoothL1Loss(1)
-        self.iter = 0
 
     def forward(self, rois, cls_scores, bbox_deltas, gt_boxes, gt_clses,device):
         """
@@ -71,10 +83,6 @@ class HeadTargetLayer(nn.Module):
         pred = rois +bbox_deltas
         # Now produce matches [L x 1]
         cls_loss = 0
-        bbox_loss = 0
-        
-        fg_num = 0.0
-        bg_num = 0.0
         rois = rois.reshape(1,-1,4)
         for idx, (gt_cls, gt_box) in enumerate(zip(gt_clses, gt_boxes)):
             pred_batch = pred[idx]
@@ -82,34 +90,15 @@ class HeadTargetLayer(nn.Module):
             matches = match(pred_batch, gt_box, self.upper, self.lower,device)
             pos_mask = matches >= 0
             pos_inds = pos_mask.nonzero()
-            fg_num += pos_mask.sum()
-            neg_mask = matches == NEGATIVE
-            neg_inds = neg_mask.nonzero()
-            sample_num = min( neg_mask.sum(),1 ) 
-            bg_num += sample_num
             pos_inds = pos_inds.reshape(-1)
-            neg_inds = neg_inds.reshape(-1)
             #sample down the negative points
-            perm = torch.randperm(neg_inds.size(0))
-            neg_inds = neg_inds[perm[:sample_num]]
             # build the positive labels
             gt_indxs = matches[pos_inds].long()
-            pos_labels = gt_cls[gt_indxs].long()
-            neg_labels = self.BACKGROUND*torch.ones(neg_inds.size(0)).long().to(device)
-            gt_labels = torch.cat((pos_labels, neg_labels))
-            pred_scores = torch.cat((cls_scores[idx,pos_inds, :], cls_scores[idx,neg_inds, :]))
+            gt_labels = gt_cls[gt_indxs].long()
+            balance_inds = balance(gt_labels, self.ncls)
+            gt_labels = gt_labels[balance_inds]
+            pred_scores = cls_scores[idx,balance_inds, :]
             #get logging info for non-bg classes
-            max_scores, max_idxs = torch.max(cls_scores, dim=2)
-            self.iter = self.iter + 1
             l = self.cls_loss(pred_scores, gt_labels)
             cls_loss = l + cls_loss 
-            # now we can compute the bbox loss
-            sample_pred_bbox = pred_batch[pos_inds, :]
-            sample_roi_bbox = rois[idx, pos_inds, :]
-            gt_bbox = gt_box[gt_indxs, :]
-            gt_bbox = gt_bbox.reshape(-1,4)
-            # no normalization happens at the head
-            batch_bbox_loss = self.bbox_loss(sample_pred_bbox, gt_bbox,sample_roi_bbox, N)
-            if batch_bbox_loss == batch_bbox_loss:
-                bbox_loss = bbox_loss + batch_bbox_loss
-        return cls_loss, bbox_loss,fg_num, bg_num
+        return cls_loss

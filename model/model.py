@@ -20,9 +20,6 @@ class MMFasterRCNN(nn.Module):
         """
         super(MMFasterRCNN, self).__init__()
         self.kwargs = kwargs
-        self.img_size = kwargs["IMG_SIZE"]
-        self.scales = kwargs["SCALES"]
-        self.ratios = kwargs["RATIOS"]
         self.backbone,self.shared = get_backbone(kwargs["BACKBONE"])
 
         # size should be informed at least partially by the receptive field

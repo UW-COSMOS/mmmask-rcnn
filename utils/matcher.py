@@ -19,16 +19,5 @@ def match(regions, gt_boxes, upper, lower, device,):
     # now we need the highest iou wrt to each
     # get back a vector indexed by gt_boxes which we need to
     # index back to targets
-    ret = NEITHER*torch.ones(regions.size(0)).to(device).long()
-    best_score_gt, match_idxs_gt = torch.max(overlaps, dim=0)
-    ret[match_idxs_gt] = torch.arange(0, gt_boxes.size(0)).to(device)
     best_score_pred, match_idxs_pred = torch.max(overlaps, dim=1)
-    mask = best_score_pred >= upper
-    # check for empty tensor
-    if match_idxs_pred[mask].size(0) > 0:
-        ret[mask] = match_idxs_pred[mask]
-
-    # finally, for anything with max iou < lower place a negative value
-    mask = best_score_pred < lower
-    ret[mask] = NEGATIVE
-    return ret
+    return match_idxs_pred
