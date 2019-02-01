@@ -35,16 +35,11 @@ def balance(gt_labels, ncls):
 
 
 class HeadTargetLayer(nn.Module):
-    def __init__(self, upper=0.4, lower=0.1, bg_ratio=1.0, ncls=1):
+    def __init__(self, ncls=1):
         super(HeadTargetLayer, self).__init__()
-        self.upper = upper
-        self.lower = lower
-        self.bg_ratio = bg_ratio
-        self.anchors = None
         self.ncls = ncls
         print(f"there are {ncls} classes")
         self.cls_loss = CrossEntropyLoss(reduction="mean")
-        self.bbox_loss = SmoothL1Loss(1)
 
     def forward(self, rois, cls_scores, bbox_deltas, gt_boxes, gt_clses,device):
         """
@@ -87,7 +82,7 @@ class HeadTargetLayer(nn.Module):
         for idx, (gt_cls, gt_box) in enumerate(zip(gt_clses, gt_boxes)):
             pred_batch = pred[idx]
             gt_box = gt_box.squeeze(0)
-            matches = match(pred_batch, gt_box, self.upper, self.lower,device)
+            matches = match(pred_batch, gt_box, device)
             pos_mask = matches >= 0
             pos_inds = pos_mask.nonzero()
             pos_inds = pos_inds.reshape(-1)

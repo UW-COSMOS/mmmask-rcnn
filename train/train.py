@@ -58,7 +58,7 @@ class TrainerHelper:
         :param params: a dictionary of training specific parameters
         """
         self.model = model.to(device)
-        val_size  = int(np.floor(0.05 * len(dataset)))
+        val_size  = 100
         train_size = len(dataset) - val_size
         self.train_set, self.val_set = random_split(dataset, (train_size, val_size))
         self.params = params
@@ -67,9 +67,8 @@ class TrainerHelper:
         if params["USE_TENSORBOARD"]:
             self.writer = SummaryWriter()
         self.head_target_layer = HeadTargetLayer(
-                                     ncls=len(model.cls_names),
-                                     upper=params["RPN"]["UPPER"],
-                                     lower=params["RPN"]["LOWER"]).to(device)
+                                     ncls=len(model.cls_names)).to(device)
+                                     
 
 
     def train(self):
@@ -89,21 +88,24 @@ class TrainerHelper:
         for epoch in tqdm(range(self.params["EPOCHS"]),desc="epochs"):
             for idx, batch in enumerate(tqdm(train_loader, desc="batches", leave=False)):
                 optimizer.zero_grad()
-                ex, gt_box, gt_cls, proposals = batch
-                ex = ex.to(self.device)
-                gt_box = gt_box
-                gt_cls = [gt.to(self.device) for gt in gt_cls]
-                gt_box = prep_gt_boxes(gt_box, self.device)
-                rois, cls_preds, cls_scores, bbox_deltas = self.model(ex, self.device, proposals=proposals)
-                rois = centers_size(rois[0])
-                rois = rois.unsqueeze(0).to(self.device).float()
-                cls_loss = self.head_target_layer(rois,
-                        cls_scores, bbox_deltas, gt_box, gt_cls, self.device)
-                loss = cls_loss 
-                tot_cls_loss += float(cls_loss)
-                loss.backward()
-                nn.utils.clip_grad_value_(self.model.parameters(), 5)
-                optimizer.step()
+                try:
+                    ex, gt_box, gt_cls, proposals = batch
+                    ex = ex.to(self.device)
+                    gt_box = gt_box
+                    gt_cls = [gt.to(self.device) for gt in gt_cls]
+                    gt_box = prep_gt_boxes(gt_box, self.device)
+                    rois, cls_preds, cls_scores, bbox_deltas = self.model(ex, self.device, proposals=proposals)
+                    rois = centers_size(rois[0])
+                    rois = rois.unsqueeze(0).to(self.device).float()
+                    cls_loss = self.head_target_layer(rois,
+                            cls_scores, bbox_deltas, gt_box, gt_cls, self.device)
+                    loss = cls_loss 
+                    tot_cls_loss += float(cls_loss)
+                    loss.backward()
+                    nn.utils.clip_grad_value_(self.model.parameters(), 5)
+                    optimizer.step()
+                except Exception as e:
+                    print(e)
                 if idx % self.params["PRINT_PERIOD"] == 0:
                     del loss 
                     del cls_loss

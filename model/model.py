@@ -60,7 +60,7 @@ class MMFasterRCNN(nn.Module):
             map = self.ROI_pooling(feature_map, rois)
             maps.append(map)
         maps = torch.stack(maps)
-        cls_preds, cls_scores, bbox_deltas = self.classification_head(maps)
+        cls_preds, cls_scores, bbox_deltas = self.classification_head(maps,proposals)
         return proposals,cls_preds, cls_scores, bbox_deltas
 
 
