@@ -88,7 +88,11 @@ def load_gt(xml_dir, identifier):
     """
     path = os.path.join(xml_dir, f"{identifier}.xml")
     as_lst = xml2list(path)
-    cls_list, tensor_list = zip(*as_lst)
+    if len(as_lst) == 0:
+        cls_list = [0]
+        tensor_list = [[0,0,0,0]]
+    else:
+        cls_list, tensor_list = zip(*as_lst)
     # convert to tensors
     gt_boxes = torch.tensor(tensor_list)
     return gt_boxes, cls_list
