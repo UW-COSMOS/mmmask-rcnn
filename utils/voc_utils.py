@@ -21,7 +21,9 @@ ICDAR_convert = {
     'Reference text': 'Body Text'
 }
 
-similar_class_sets = [set(['Other', 'Figure Note', 'Figure Caption', 'Table Note', 'Table Caption', 'Body Text', 'Page Footer', 'Page Header', 'Equation label', 'Section Header', 'Abstract', 'Reference text']), set(['Figure', 'Figure Caption', 'Figure Note']), set(['Table', 'Table Note', 'Table Caption']), set(['Equation, Equation label'])]
+reference_convert = {'Figure': ['Figure', 'Figure Note'], 'Equation': ['Equation', 'Equation label'], 'Body Text': ['Other', 'Figure Note', 'Figure Caption', 'Table Note', 'Table Caption', 'Body Text', 'Page Footer', 'Page Header', 'Equation label', 'Section Header', 'Abstract', 'Reference text', 'Figure Caption', 'Table Caption'], 'Table': ['Table', 'Table Note']}
+
+similar_class_sets = [set(['Other', 'Figure Note', 'Figure Caption', 'Table Note', 'Table Caption', 'Body Text', 'Page Footer', 'Page Header', 'Equation label', 'Section Header', 'Abstract', 'Reference text', 'Figure Caption', 'Table Caption']), set(['Figure', 'Figure Note']), set(['Table', 'Table Note']), set(['Equation, Equation label'])]
 
 def load_from_file(path):
     """
