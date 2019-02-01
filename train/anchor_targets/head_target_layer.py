@@ -75,7 +75,8 @@ class HeadTargetLayer(nn.Module):
         bbox_deltas = torch.stack(bbox_lst)
         bbox_deltas = bbox_deltas.reshape(N, L, 4)
         # now we can apply the bbox deltas to the RoIs
-        pred = rois +bbox_deltas
+        print(bbox_deltas)
+        pred = rois# +bbox_deltas
         # Now produce matches [L x 1]
         cls_loss = 0
         rois = rois.reshape(1,-1,4)

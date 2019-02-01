@@ -87,8 +87,8 @@ def get_resnet(nlayers=50):
             base.maxpool, base.layer1, base.layer2,
             base.layer3)
     #dont keep parameters gradients for ConvNet
-    for param in backbone_frozen.parameters():
-			  param.requires_grad = False
+    #for param in backbone_frozen.parameters():
+	#		  param.requires_grad = False
     shared = base.layer4
     #shared.requires_grad = True
     backbone_frozen.output_depth = 2048

@@ -6,10 +6,10 @@ import xml.etree.ElementTree as ET
 
 ICDAR_convert = {
     'Figure Note': 'Figure',
-    'Figure Caption': 'Figure',
+    'Figure Caption': 'Body Text',
     'Figure': 'Figure',
     'Table Note': 'Table',
-    'Table Caption': 'Table',
+    'Table Caption': 'Body Text',
     'Table': 'Table',
     'Body Text': 'Body Text',
     'Page Footer': 'Body Text',
@@ -18,7 +18,8 @@ ICDAR_convert = {
     'Equation label': 'Equation',
     'Section Header': 'Body Text',
     'Abstract': 'Body Text',
-    'Reference text': 'Body Text'
+    'Reference text': 'Body Text',
+    'Other': 'Body Text',
 }
 
 reference_convert = {'Figure': ['Figure', 'Figure Note'], 'Equation': ['Equation', 'Equation label'], 'Body Text': ['Other', 'Figure Note', 'Figure Caption', 'Table Note', 'Table Caption', 'Body Text', 'Page Footer', 'Page Header', 'Equation label', 'Section Header', 'Abstract', 'Reference text', 'Figure Caption', 'Table Caption'], 'Table': ['Table', 'Table Note']}
