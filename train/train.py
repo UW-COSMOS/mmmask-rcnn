@@ -14,7 +14,6 @@ from train.anchor_targets.anchor_target_layer import AnchorTargetLayer
 from train.anchor_targets.head_target_layer import HeadTargetLayer
 from functools import partial
 import bitmath
-from .scheduler import Scheduler
 from tensorboardX import SummaryWriter
 from .data_layer.transforms import NormalizeWrapper
 import torchvision.transforms as transform
@@ -59,7 +58,7 @@ class TrainerHelper:
         :param params: a dictionary of training specific parameters
         """
         self.model = model.to(device)
-        val_size  = int(np.floor(0.05 * len(dataset)))
+        val_size  = 100
         train_size = len(dataset) - val_size
         self.train_set, self.val_set = random_split(dataset, (train_size, val_size))
         self.params = params
@@ -67,16 +66,12 @@ class TrainerHelper:
         self.device = device
         if params["USE_TENSORBOARD"]:
             self.writer = SummaryWriter()
-        self.head_target_layer = HeadTargetLayer(model.ratios,
-                                     model.scales,
-                                     model.img_size,
-                                     ncls=len(model.cls_names),
-                                     upper=params["RPN"]["UPPER"],
-                                     lower=params["RPN"]["LOWER"]).to(device)
+        self.head_target_layer = HeadTargetLayer(
+                                     ncls=len(model.cls_names)).to(device)
+                                     
 
 
     def train(self):
-        self.model.train(mode=True)
         optimizer = optim.Adam(self.model.parameters(), 
                               lr=self.params["LEARNING_RATE"],
                               weight_decay=self.params["WEIGHT_DECAY"])
@@ -86,27 +81,31 @@ class TrainerHelper:
                             pin_memory=True,
                             num_workers=3)
                             
+        self.model.train(mode=True)
         iter = 0
         tot_cls_loss = 0.0
         tot_bbox_loss = 0.0
         for epoch in tqdm(range(self.params["EPOCHS"]),desc="epochs"):
             for idx, batch in enumerate(tqdm(train_loader, desc="batches", leave=False)):
                 optimizer.zero_grad()
-                ex, gt_box, gt_cls, proposals = batch
-                ex = ex.to(self.device)
-                gt_box = gt_box
-                gt_cls = [gt.to(self.device) for gt in gt_cls]
-                gt_box = prep_gt_boxes(gt_box, self.device)
-                rois, cls_preds, cls_scores, bbox_deltas = self.model(ex, self.device, proposals=proposals)
-                rois = centers_size(rois[0])
-                rois = rois.unsqueeze(0).to(self.device).float()
-                cls_loss = self.head_target_layer(rois,
-                        cls_scores, bbox_deltas, gt_box, gt_cls, self.device)
-                loss = cls_loss 
-                tot_cls_loss += float(cls_loss)
-                loss.backward()
-                #nn.utils.clip_grad_value_(self.model.parameters(), 5)
-                optimizer.step()
+                try:
+                    ex, gt_box, gt_cls, proposals = batch
+                    ex = ex.to(self.device)
+                    gt_box = gt_box
+                    gt_cls = [gt.to(self.device) for gt in gt_cls]
+                    gt_box = prep_gt_boxes(gt_box, self.device)
+                    rois, cls_preds, cls_scores, bbox_deltas = self.model(ex, self.device, proposals=proposals)
+                    rois = centers_size(rois[0])
+                    rois = rois.unsqueeze(0).to(self.device).float()
+                    cls_loss = self.head_target_layer(rois,
+                            cls_scores, bbox_deltas, gt_box, gt_cls, self.device)
+                    loss = cls_loss 
+                    tot_cls_loss += float(cls_loss)
+                    loss.backward()
+                    nn.utils.clip_grad_value_(self.model.parameters(), 5)
+                    optimizer.step()
+                except Exception as e:
+                    print(e)
                 if idx % self.params["PRINT_PERIOD"] == 0:
                     del loss 
                     del cls_loss
@@ -121,9 +120,10 @@ class TrainerHelper:
 
 
                     self.validate(val_loader, iter)
-                    self.writer.add_scalar("train_cls_loss", tot_cls_loss, iter)
-                    tot_cls_loss = 0.0
-                    tot_bbox_loss = 0.0
+                    if not (idx == 0 and epoch ==0):
+                        self.writer.add_scalar("train_cls_loss", tot_cls_loss, iter)
+                        tot_cls_loss = 0.0
+                        tot_bbox_loss = 0.0
                     iter += 1
                     del val_loader
             if epoch % self.params["CHECKPOINT_PERIOD"] == 0:
@@ -132,6 +132,7 @@ class TrainerHelper:
                 torch.save(self.model.state_dict(), path)
 
     def validate(self,loader,iter):
+        self.model.eval()
         tot_cls_loss = 0.0
         torch.cuda.empty_cache()
         for batch in loader:
@@ -155,6 +156,9 @@ class TrainerHelper:
         self.output_batch_losses(
                                  tot_cls_loss,
                                  iter) 
+
+        self.model.train()
+
 
     def output_batch_losses(self,  cls_loss,iter ):
         """
