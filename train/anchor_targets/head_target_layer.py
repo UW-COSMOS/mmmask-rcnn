@@ -71,10 +71,6 @@ class HeadTargetLayer(nn.Module):
         pred = rois +bbox_deltas
         # Now produce matches [L x 1]
         cls_loss = 0
-        bbox_loss = 0
-        
-        fg_num = 0.0
-        bg_num = 0.0
         rois = rois.reshape(1,-1,4)
         for idx, (gt_cls, gt_box) in enumerate(zip(gt_clses, gt_boxes)):
             pred_batch = pred[idx]
@@ -82,34 +78,15 @@ class HeadTargetLayer(nn.Module):
             matches = match(pred_batch, gt_box, self.upper, self.lower,device)
             pos_mask = matches >= 0
             pos_inds = pos_mask.nonzero()
-            fg_num += pos_mask.sum()
-            neg_mask = matches == NEGATIVE
-            neg_inds = neg_mask.nonzero()
-            sample_num = min( neg_mask.sum(),1 ) 
-            bg_num += sample_num
             pos_inds = pos_inds.reshape(-1)
-            neg_inds = neg_inds.reshape(-1)
             #sample down the negative points
-            perm = torch.randperm(neg_inds.size(0))
-            neg_inds = neg_inds[perm[:sample_num]]
             # build the positive labels
             gt_indxs = matches[pos_inds].long()
-            pos_labels = gt_cls[gt_indxs].long()
-            neg_labels = self.BACKGROUND*torch.ones(neg_inds.size(0)).long().to(device)
-            gt_labels = torch.cat((pos_labels, neg_labels))
-            pred_scores = torch.cat((cls_scores[idx,pos_inds, :], cls_scores[idx,neg_inds, :]))
+            gt_labels = gt_cls[gt_indxs].long()
+            pred_scores = cls_scores[idx,pos_inds, :]
             #get logging info for non-bg classes
             max_scores, max_idxs = torch.max(cls_scores, dim=2)
             self.iter = self.iter + 1
             l = self.cls_loss(pred_scores, gt_labels)
             cls_loss = l + cls_loss 
-            # now we can compute the bbox loss
-            sample_pred_bbox = pred_batch[pos_inds, :]
-            sample_roi_bbox = rois[idx, pos_inds, :]
-            gt_bbox = gt_box[gt_indxs, :]
-            gt_bbox = gt_bbox.reshape(-1,4)
-            # no normalization happens at the head
-            batch_bbox_loss = self.bbox_loss(sample_pred_bbox, gt_bbox,sample_roi_bbox, N)
-            if batch_bbox_loss == batch_bbox_loss:
-                bbox_loss = bbox_loss + batch_bbox_loss
-        return cls_loss, bbox_loss,fg_num, bg_num
+        return cls_loss

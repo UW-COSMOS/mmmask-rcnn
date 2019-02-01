@@ -77,7 +77,8 @@ class TrainerHelper:
 
     def train(self):
         self.model.train(mode=True)
-        optimizer = optim.Adam(self.model.parameters(), lr=self.params["LEARNING_RATE"],
+        optimizer = optim.Adam(self.model.parameters(), 
+                              lr=self.params["LEARNING_RATE"],
                               weight_decay=self.params["WEIGHT_DECAY"])
         train_loader = DataLoader(self.train_set,
                             batch_size=self.params["BATCH_SIZE"],
@@ -99,21 +100,18 @@ class TrainerHelper:
                 rois, cls_preds, cls_scores, bbox_deltas = self.model(ex, self.device, proposals=proposals)
                 rois = centers_size(rois[0])
                 rois = rois.unsqueeze(0).to(self.device).float()
-                cls_loss, bbox_loss,fg_num, bg_num = self.head_target_layer(rois,
+                cls_loss = self.head_target_layer(rois,
                         cls_scores, bbox_deltas, gt_box, gt_cls, self.device)
-                loss = cls_loss + bbox_loss
+                loss = cls_loss 
                 tot_cls_loss += float(cls_loss)
-                tot_bbox_loss += float(bbox_loss)
                 loss.backward()
                 #nn.utils.clip_grad_value_(self.model.parameters(), 5)
                 optimizer.step()
                 if idx % self.params["PRINT_PERIOD"] == 0:
                     del loss 
                     del cls_loss
-                    del bbox_loss
                     del cls_preds
                     del cls_scores
-                    del bbox_deltas
                     torch.cuda.empty_cache()
                     val_loader = DataLoader(self.val_set,
                             batch_size=self.params["BATCH_SIZE"],
@@ -124,7 +122,6 @@ class TrainerHelper:
 
                     self.validate(val_loader, iter)
                     self.writer.add_scalar("train_cls_loss", tot_cls_loss, iter)
-                    self.writer.add_scalar("train_bbox_loss", tot_bbox_loss, iter)
                     tot_cls_loss = 0.0
                     tot_bbox_loss = 0.0
                     iter += 1
@@ -136,10 +133,6 @@ class TrainerHelper:
 
     def validate(self,loader,iter):
         tot_cls_loss = 0.0
-        tot_bbox_loss = 0.0
-        tot_fg = 0.0
-        tot_bg = 0.0
-        n_pos_pred = 0.0
         torch.cuda.empty_cache()
         for batch in loader:
             ex, gt_box, gt_cls, proposals = batch
@@ -153,26 +146,17 @@ class TrainerHelper:
             cls_preds = cls_preds.squeeze(0)
             L ,ncls = cls_preds.shape
             preds, idxs = torch.max(cls_preds, dim=1)
-            non_bg = (idxs != ncls-1).sum()
-            n_pos_pred += non_bg
             rois = centers_size(rois[0])
             rois = rois.unsqueeze(0).to(self.device).float()
-            cls_loss, bbox_loss,fg_num, bg_num = self.head_target_layer(rois,
+            cls_loss = self.head_target_layer(rois,
                     cls_scores, bbox_deltas, gt_box, gt_cls, self.device)
             # update batch losses, cast as float so we don't keep gradient history
             tot_cls_loss += float(cls_loss)
-            tot_bbox_loss += float(bbox_loss)
-            tot_fg += float(fg_num)
-            tot_bg += float(bg_num)
         self.output_batch_losses(
                                  tot_cls_loss,
-                                 tot_bbox_loss,
-                                 tot_fg,
-                                 tot_bg,
-                                 n_pos_pred,
                                  iter) 
 
-    def output_batch_losses(self,  cls_loss, bbox_loss,fg_num,bg_num, non_bg_pred,iter ):
+    def output_batch_losses(self,  cls_loss,iter ):
         """
         output either by priting or to tensorboard
         :param rpn_cls_loss:
@@ -183,15 +167,11 @@ class TrainerHelper:
         """
         if self.params["USE_TENSORBOARD"]:
             vals = {
-                "bbox_loss": bbox_loss,
                 "cls_loss": cls_loss,
-                "fg_bg_ratio": float(fg_num)/float(bg_num),
-                "non_bg_preds": non_bg_pred
             }
             for key in vals:
                 self.writer.add_scalar(key, vals[key], iter)
-        print(f"  head_cls_loss: {cls_loss}, bbox_loss: {bbox_loss}")
-        print(f"  fg/bg: {fg_num}/{bg_num}")
+        print(f"  head_cls_loss: {cls_loss}")
 
 
 def check_grad(model):
