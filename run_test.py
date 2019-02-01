@@ -56,15 +56,15 @@ pool = mp.Pool(processes=240)
 
 print('Begin writing proposals')
 #[write_proposals(os.path.join('tmp', 'images', x)) for x in os.listdir(os.path.join('tmp', 'images'))]
-results = [pool.apply_async(write_proposals, args=(os.path.join('images', x),)) for x in os.listdir('images')[:100]]
+results = [pool.apply_async(write_proposals, args=(os.path.join('images', x),)) for x in os.listdir('images')]
 [r.get() for r in results]
 
 print('Begin preprocessing pngs')
-results = [pool.apply_async(preprocess_pngs, args=(x,)) for x in os.listdir(os.path.join('images'))[:100]]
+results = [pool.apply_async(preprocess_pngs, args=(x,)) for x in os.listdir(os.path.join('images'))]
 [r.get() for r in results]
 
 with open('test.txt', 'w') as wf:
-    for f in os.listdir('tmp/images')[:100]:
+    for f in os.listdir('tmp/images'):
         wf.write(f[:-4] + '\n')
 
 shutil.move('test.txt', 'tmp/test.txt')

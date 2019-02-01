@@ -7,6 +7,7 @@ from random import sample
 import matplotlib.pyplot as plt
 from utils.voc_utils import similar_class_sets 
 plt.style.use('ggplot')
+import pandas as pd
 
 
 def rect(d, im, color, points):
@@ -98,7 +99,7 @@ color_classes =  {"Section Header":"#800000", "Body Text":"#e6194B",
                   "Table Note":"#f032e6", "Abstract":"#a9a9a9", "Other":"#469990", 
                   "Equation label":"#aaffc3", "Reference text":"#9A6324", "Figure Note":"#ffd8b1"}
 
-def run_evaluate(predict_dir, target_dir, img_dir=None, simi=True, thres=0.8):
+def run_evaluate(predict_dir, target_dir, img_dir=None, simi=False, thres=0):
     fp_list = []
     classification_p_list = []
     total_intersection = 0
@@ -262,7 +263,12 @@ def run_evaluate(predict_dir, target_dir, img_dir=None, simi=True, thres=0.8):
 
 
     print('Class counts')
+
     print(class_counts)
+    df = pd.DataFrame(class_counts)
+    df = df.fillna(value=0)
+    df['Total'] = df.sum(axis=1)
+    print(df[sorted(df.columns)])
     print('------------')
 
 
@@ -307,7 +313,6 @@ def run_evaluate(predict_dir, target_dir, img_dir=None, simi=True, thres=0.8):
                 m_p = x
         max_ps.append(m_p)
     mAP = sum(max_ps) / len(max_ps)
-    print(mAP)
             
 
     uz = list(zip(*p_r_curve))
@@ -372,7 +377,7 @@ def make_pie_charts(stats_map):
 
 
 if __name__ == '__main__':
-    fp_list = run_evaluate('xml', 'annotations', img_dir='images')
+    fp_list = run_evaluate('xml', 'annotations', img_dir=None)
     smap = calculate_statistics_map(fp_list)
     make_pie_charts(smap)
     

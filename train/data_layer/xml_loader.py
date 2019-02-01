@@ -11,6 +11,7 @@ from utils.boundary_utils import centers_size
 import torch
 from xml.etree import ElementTree as ET
 from .transforms import NormalizeWrapper
+from utils.voc_utils import ICDAR_convert
 
 
 normalizer = NormalizeWrapper(mean=[0.485, 0.456, 0.406],
@@ -34,7 +35,9 @@ def mapper(obj):
     # get centers
     x = x1 + w/2
     y = y1 + h/2
-    return obj.find("name").text, (x, y, w, h)
+    cls = obj.find("name").text
+    converted_cls = ICDAR_convert[cls]
+    return converted_cls, (x, y, w, h)
 
 
 def xml2list(fp):

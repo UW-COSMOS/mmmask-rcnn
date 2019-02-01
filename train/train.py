@@ -158,6 +158,8 @@ class TrainerHelper:
                                  iter) 
 
         self.model.train()
+
+
     def output_batch_losses(self,  cls_loss,iter ):
         """
         output either by priting or to tensorboard
