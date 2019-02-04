@@ -88,8 +88,9 @@ model.to(device)
 if not os.path.exists('xml'):
     os.makedirs('xml')
 #classes = list(ICDAR_convert.keys())
-classes =  ["Section Header", "Body Text", "Figure", "Figure Caption", "Table", "Equation",
-            "Page Footer", "Page Header", "Table Caption", "Table Note", "Abstract", "Other", "Equation label", "Reference text", "Figure Note"]
+#classes =  ["Section Header", "Body Text", "Figure", "Figure Caption", "Table", "Equation",
+#            "Page Footer", "Page Header", "Table Caption", "Table Note", "Abstract", "Other", "Equation label", "Reference text", "Figure Note"]
+classes = ["Body Text", "Figure", "Table", "Equation"]
 for idx, batch in enumerate(tqdm(loader, desc="batches", leave=False)):
     ex, proposals, idn = batch
     ex = ex.to(device)
