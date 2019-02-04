@@ -403,10 +403,9 @@ def test_get_proposals():
             raise Exception('Test 3 test_get_proposals failed')
 
 
-def write_proposals(img_p, output_dir='tmp/cc_proposals'):
+def write_proposals(img_p, output_dir='tmp/cc_proposals', white_thresh=245, blank_row_height=10):
     img = Image.open(img_p)
-    thresh = 245
-    fn = lambda x : 0 if x > thresh else 255
+    fn = lambda x : 0 if x > white_thresh else 255
     img_np = np.array(img.convert('RGB'))
     bmap_np = np.array(img.convert('L').point(fn, mode='1')).astype(np.uint8)
     img_height = bmap_np.shape[0]
@@ -436,7 +435,6 @@ def write_proposals(img_p, output_dir='tmp/cc_proposals'):
         else:
             right_w += 1
             left_w += 1
-    blank_row_height = 10
     num_sections = int(img_height / blank_row_height)
     blank_row = np.zeros((blank_row_height, bmap_np.shape[1]))
     curr_top = 0
@@ -463,14 +461,12 @@ def write_proposals(img_p, output_dir='tmp/cc_proposals'):
     block_coords = set()
     block_coords2 = {}
     blocks_list = []
-    line_width = 5
     for row, top_coord, bottom_coord in rows:
         num_cols = get_columns_for_row(row)
         blocks, coords, col_idx = divide_row_into_columns(row, num_cols)
         for ind, b in enumerate(blocks):
             c = coords[ind]
             column_index = col_idx[ind]
-            blank_row_height = 10
             num_sections = int(b.shape[0] / blank_row_height)
             blank_row = np.zeros((blank_row_height, b.shape[1]))
             curr_top = 0
@@ -520,10 +516,6 @@ def write_proposals(img_p, output_dir='tmp/cc_proposals'):
         for ind2, bc in enumerate(coords_list):
             tl_y1, tl_x1, br_y1, br_x1 = bc
             block_coords.add((tl_x1, tl_y1, br_x1, br_y1))
-            #for bc2 in coords_list[ind2:]:
-            #    tl_y1, tl_x1, br_y1, br_x1 = bc
-            #    tl_y2, tl_x2, br_y2, br_x2 = bc2
-            #    block_coords.add((min(tl_x1, tl_x2), min(tl_y1, tl_y2), max(br_x1, br_x2), max(br_y1, br_y2)))
     block_coords = list(block_coords)
     img_p = os.path.basename(img_p)
     write_p = os.path.join(output_dir, img_p[:-4] + '.csv')
