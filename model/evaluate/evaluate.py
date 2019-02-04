@@ -5,7 +5,7 @@ import numpy as np
 from tqdm import tqdm
 from random import sample
 import matplotlib.pyplot as plt
-from utils.voc_utils import similar_class_sets 
+from utils.voc_utils import similar_class_sets, ICDAR_convert
 plt.style.use('ggplot')
 import pandas as pd
 
@@ -117,7 +117,7 @@ def run_evaluate(predict_dir, target_dir, img_dir=None, simi=False, thres=0):
                 p_cls, p_bb = predict
                 p_bb = [x - 5 for x in p_bb]
                 d = ImageDraw.Draw(img)
-                d.rectangle(p_bb, outline=color_classes[p_cls], width=3)
+                d.rectangle(p_bb, outline=color_classes[p_cls])
                 img.save(f'outputs/{predict_f[:-4] + ".png"}')
 
         list_map = match_lists(predict_list, target_list)
@@ -132,6 +132,7 @@ def run_evaluate(predict_dir, target_dir, img_dir=None, simi=False, thres=0):
                 continue
             t, iou = matched_target
             t_cls, t_bb = t
+            t_cls = ICDAR_convert[t_cls]
             if t_bb in tbb_map:
                 tbb_map[t_bb].append(p_bb)
             else:
@@ -377,7 +378,7 @@ def make_pie_charts(stats_map):
 
 
 if __name__ == '__main__':
-    fp_list = run_evaluate('xml', 'annotations', img_dir=None)
+    fp_list = run_evaluate('xml', 'annotations', img_dir='images')
     smap = calculate_statistics_map(fp_list)
     make_pie_charts(smap)
     
