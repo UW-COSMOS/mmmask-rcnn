@@ -24,7 +24,7 @@ def filter_regions(regions, min_size):
 
 
 class ProposalLayer(nn.Module):
-    def __init__(self, ratios, scales, image_size=1920, NMS_PRE=3000, NMS_POST=300, min_size=64, threshold=0.6):
+    def __init__(self, ratios, scales, image_size=1920, NMS_PRE=3000, NMS_POST=300, min_size=64, threshold=0.5):
         super(ProposalLayer,self).__init__()
         self.feat_stride = None
         self.ratios = ratios
@@ -95,7 +95,6 @@ class ProposalLayer(nn.Module):
         cls_scores = torch.stack(slices_scores, dim=0)
         regions = torch.stack(slices_regions, dim=0)
         output = cls_scores.new(N, self.NMS_POST, 5)
-        # TODO implement padding here
         for i in range(N):
             keep_idx = nms(regions[i, :,:], cls_scores[i,:], self.threshold)
             keep_idx = keep_idx[:self.NMS_POST]

@@ -28,7 +28,7 @@ class MultiModalClassifier(nn.Module):
         self.depth = pool_depth
         self.dropout = nn.Dropout(p=0.3)
         self.FC = nn.Linear(self.height*self.width*self.depth, intermediate)
-        self.FC_2 = nn.Linear(intermediate+2, intermediate+2)
+        self.FC_2 = nn.Linear(intermediate, intermediate)
         # background class
         self.cls_branch = nn.Linear(intermediate+2, ncls)
         self.bbox_branch = nn.Linear(intermediate+2, 4*ncls)
@@ -40,12 +40,9 @@ class MultiModalClassifier(nn.Module):
         :param roi_maps: [NxLxDHxW]
         :return:
         """
-        x_addition = self.featurize_proposals(proposals[0])
         N, L, D, H, W = roi_maps.shape 
         x = roi_maps.view(N,-1, self.depth * self.width * self.height)
         x = self.FC(x)
-        x_addition = x_addition.to(x.device)
-        x = torch.cat((x, x_addition), dim=2)
         x = self.dropout(x)
         x = relu(x)
         x = self.FC_2(x)

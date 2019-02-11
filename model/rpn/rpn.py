@@ -49,4 +49,4 @@ class RPN(nn.Module):
         """
         cls_branch_preds = torch.sigmoid(cls_branch_scores)
         bbox_branch_preds = self.RPN_bbox_pred(x)
-        return cls_branch_preds,cls_branch_scores, bbox_branch_preds
+        return cls_branch_preds, cls_branch_scores, bbox_branch_preds
