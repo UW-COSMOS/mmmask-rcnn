@@ -11,7 +11,7 @@ from utils.boundary_utils import centers_size
 import torch
 from xml.etree import ElementTree as ET
 from .transforms import NormalizeWrapper
-from utils.voc_utils import ICDAR_convert
+
 
 
 normalizer = NormalizeWrapper(mean=[0.485, 0.456, 0.406],
@@ -20,7 +20,7 @@ normalizer = NormalizeWrapper(mean=[0.485, 0.456, 0.406],
 
                                                                         
 
-def mapper(obj):
+def mapper(obj, preprocessor=None):
     """
     map a single object to the list structure
     :param obj: an Etree node
@@ -36,8 +36,9 @@ def mapper(obj):
     x = x1 + w/2
     y = y1 + h/2
     cls = obj.find("name").text
-    converted_cls = ICDAR_convert[cls]
-    return converted_cls, (x, y, w, h)
+    if preprocessor is not None:
+        cls = preprocessor[cls]
+    return cls, (x, y, w, h)
 
 
 def xml2list(fp):
@@ -106,7 +107,7 @@ class XMLLoader:
     it is expected that the directories have no files
     other than annotations
     """
-    def __init__(self, xml_dir, img_dir,proposal_dir, img_type):
+    def __init__(self, img_dir,xml_dir=None, proposal_dir=None, img_type="jpg"):
         """
         Initialize a XML loader object
         :param xml_dir: directory to get XML from
@@ -129,9 +130,11 @@ class XMLLoader:
         identifier = self.identifiers[item]
         img = load_image(self.img_dir, identifier, self.img_type)
         gt = None
+        proposals = None
         if self.xml_dir is not None:
             gt = load_gt(self.xml_dir, identifier)
-        proposals = load_proposal(self.proposal_dir, identifier)
-        if gt is not None:
-            return img, gt, proposals, identifier
-        return img, proposals, identifier
+        if self.proposal_dir is not None:
+            proposals = load_proposal(self.proposal_dir, identifier)
+        ret = [img, gt, proposals, identifier]
+        ret = filter(lambda x: x is not None, ret)
+        return list(ret)

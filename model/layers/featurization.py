@@ -15,6 +15,7 @@ class Featurizer(nn.Module):
         Initialize a featurizer layer
         :param cfg: A model config to read from
         """
+        super(self, )
         self.backbone = get_backbone(cfg.backbone)
         self.method = cfg.featurizer_method
         self.RPN = None
@@ -23,7 +24,7 @@ class Featurizer(nn.Module):
         self.cc = None
         self.RPN_history = []
         if self.method == "CONNECTED_COMPONENTS":
-            self.cc = CCLayer()
+            self.cc = CCLayer(cfg)
         if self.method == "RPN":
             self.RPN = RPN(cfg.BACKBONE_DEPTH, cfg.RPN.DIM, cfg.RATIOS, cfg.SCALES)
             self.ROI_Align = ROIAlign(cfg.ROI_ALIGN.OUTPUT_SIZE,
