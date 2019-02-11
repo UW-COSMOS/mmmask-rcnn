@@ -10,7 +10,6 @@ from model.head.object_classifier import MultiModalClassifier
 from model.proposal.proposal_layer import ProposalLayer
 from model.roi.roi_pool import ROIPool
 from model.roi.roi_align import ROIAlign
-from utils.memory import get_gpu_mem
 from model.connected_components import connected_components as cc
 class MMFasterRCNN(nn.Module):
     def __init__(self, kwargs):
@@ -42,8 +41,8 @@ class MMFasterRCNN(nn.Module):
         """
         Process an Image through the network
         :param img: [Nx3xSIZE x SIZE] tensor
-				:param device: the device to process on         
-				:return: [(cls_index,[x1, y1, x2, y2])] for each non bg-class
+		:param device: the device to process on
+		:return: [(cls_index,[x1, y1, x2, y2])] for each non bg-class
         """
         N = img.size(0)
         feature_map = self.backbone.forward(img)
