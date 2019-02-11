@@ -3,6 +3,7 @@ An XML and image repo loader
 meant to work with the GTDataset class
 Author: Josh McGrath
 """
+from torch.utils.data import Dataset
 import os
 from os.path import splitext
 from skimage import io
@@ -101,7 +102,7 @@ def load_gt(xml_dir, identifier):
     gt_boxes = torch.tensor(tensor_list)
     return gt_boxes, cls_list
 
-class XMLLoader:
+class XMLLoader(Dataset):
     """
     Loads examples and ground truth from given directories
     it is expected that the directories have no files
@@ -123,7 +124,7 @@ class XMLLoader:
         self.num_images = len(self.imgs)
         print(f"Constructed a {self.num_images} image dataset")
 
-    def size(self):
+    def __len__(self):
         return self.num_images
 
     def __getitem__(self, item):
