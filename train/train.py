@@ -88,7 +88,7 @@ class TrainerHelper:
                 optimizer.zero_grad()
                 ex, gt_box, gt_cls, proposals = batch
                 ex = ex.to(self.device)
-                gt_box = gt_box
+                proposals = [p.to(self.device) for p in proposals]
                 gt_cls = [gt.to(self.device) for gt in gt_cls]
                 gt_box = prep_gt_boxes(gt_box, self.device)
                 rois, cls_preds, cls_scores, bbox_deltas = self.model(ex, self.device, proposals=proposals)

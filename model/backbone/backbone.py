@@ -85,8 +85,10 @@ def get_resnet(nlayers=50):
     # now build from the base a sequential object with the subpieces of the network
     backbone_frozen = nn.Sequential(base.conv1, base.bn1, base.relu,
             base.maxpool, base.layer1, base.layer2,
-            base.layer3, base.layer4)
-    return backbone_frozen
+            base.layer3)
+    backbone_frozen.requires_grad = False
+    backbone = nn.Sequential(backbone_frozen, base.layer4)
+    return backbone
 
 if __name__ == '__main__':
     pass

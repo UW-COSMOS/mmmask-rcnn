@@ -80,6 +80,7 @@ class HeadTargetLayer(nn.Module):
         cls_loss = 0
         for idx, (gt_cls, gt_box) in enumerate(zip(gt_clses, gt_boxes)):
             pred_batch = pred[idx]
+            pred_batch = pred_batch.to(device)
             gt_box = gt_box.squeeze(0)
             matches = match(pred_batch, gt_box, device)
             pos_mask = matches >= 0

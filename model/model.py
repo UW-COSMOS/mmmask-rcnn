@@ -37,7 +37,7 @@ class MMFasterRCNN(nn.Module):
 
     def set_weights(self,mean, std):
         for child in self.children():
-            if child == self.shared:
+            if child == self.featurizer:
                 continue
             for parm in self.modules():
                 if not hasattr(parm, "weight"):

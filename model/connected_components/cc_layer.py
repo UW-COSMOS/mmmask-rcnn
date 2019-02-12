@@ -39,6 +39,7 @@ class CCLayer(nn.Module):
         :return:
         """
 
+        img = img.to(torch.device("cpu"))
         img = self.pil(img.squeeze(0))
         img = img.crop(proposal)
         img = img.resize((self.warped_size, self.warped_size))
