@@ -5,7 +5,8 @@ as arguments
 """
 import torch
 from  torch import nn
-from os.path import join
+from os.path import join, isdir
+from os import mkdir
 from torch import optim
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -54,7 +55,7 @@ class TrainerHelper:
         :param params: a dictionary of training specific parameters
         """
         self.model = model.to(device)
-        val_size  = 100
+        val_size = params["VAL_SIZE"]
         train_size = len(dataset) - val_size
         self.train_set, self.val_set = random_split(dataset, (train_size, val_size))
         self.params = params
@@ -64,6 +65,7 @@ class TrainerHelper:
             self.writer = SummaryWriter()
         self.head_target_layer = HeadTargetLayer(
                                      ncls=len(model.cls_names)).to(device)
+
                                      
 
 
@@ -84,24 +86,22 @@ class TrainerHelper:
         for epoch in tqdm(range(self.params["EPOCHS"]),desc="epochs"):
             for idx, batch in enumerate(tqdm(train_loader, desc="batches", leave=False)):
                 optimizer.zero_grad()
-                try:
-                    ex, gt_box, gt_cls, proposals = batch
-                    ex = ex.to(self.device)
-                    gt_box = gt_box
-                    gt_cls = [gt.to(self.device) for gt in gt_cls]
-                    gt_box = prep_gt_boxes(gt_box, self.device)
-                    rois, cls_preds, cls_scores, bbox_deltas = self.model(ex, self.device, proposals=proposals)
-                    rois = centers_size(rois[0])
-                    rois = rois.unsqueeze(0).to(self.device).float()
-                    cls_loss = self.head_target_layer(rois,
-                            cls_scores, bbox_deltas, gt_box, gt_cls, self.device)
-                    loss = cls_loss 
-                    tot_cls_loss += float(cls_loss)
-                    loss.backward()
-                    nn.utils.clip_grad_value_(self.model.parameters(), 5)
-                    optimizer.step()
-                except Exception as e:
-                    print(e)
+                ex, gt_box, gt_cls, proposals = batch
+                ex = ex.to(self.device)
+                gt_box = gt_box
+                gt_cls = [gt.to(self.device) for gt in gt_cls]
+                gt_box = prep_gt_boxes(gt_box, self.device)
+                rois, cls_preds, cls_scores, bbox_deltas = self.model(ex, self.device, proposals=proposals)
+                N = len(rois)
+                for i in range(N):
+                    rois[i] = centers_size(rois[i])
+                cls_loss = self.head_target_layer(rois,
+                        cls_scores, bbox_deltas, gt_box, gt_cls, self.device)
+                loss = cls_loss
+                tot_cls_loss += float(cls_loss)
+                loss.backward()
+                nn.utils.clip_grad_value_(self.model.parameters(), 5)
+                optimizer.step()
                 if idx % self.params["PRINT_PERIOD"] == 0:
                     del loss 
                     del cls_loss
@@ -125,6 +125,8 @@ class TrainerHelper:
             if epoch % self.params["CHECKPOINT_PERIOD"] == 0:
                 name = f"model_{epoch}.pth"
                 path = join(self.params["SAVE_DIR"], name)
+                if not isdir(self.params["SAVE_DIR"]):
+                    mkdir(self.params["SAVE_DIR"])
                 torch.save(self.model.state_dict(), path)
 
     def validate(self,loader,iter):

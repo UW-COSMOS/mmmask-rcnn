@@ -4,4 +4,4 @@ HEAD:
 PROPOSAL_METHOD: "CONNECTED_COMPONENTS"
 CC_LAYER:
   WARPED_SIZE: 500
-CLASSES: ["Body Text", "Figure", "Table", "Equation"]
+CLASSES: ["cat", "person"]

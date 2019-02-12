@@ -23,13 +23,14 @@ class MMFasterRCNN(nn.Module):
                                          D,
                                          cfg.HEAD.DIM,
                                          len(cfg.CLASSES))
+        self.cls_names = cfg.CLASSES
 
 
-    def forward(self, *inputs):
+    def forward(self, *inputs, **kwargs):
         """
         Process an Image through the network
         """
-        maps, proposals = self.featurizer(*inputs)
+        maps, proposals = self.featurizer(*inputs, **kwargs)
         cls_preds, cls_scores, bbox_deltas = self.head(maps)
         return proposals, cls_preds, cls_scores, bbox_deltas
 

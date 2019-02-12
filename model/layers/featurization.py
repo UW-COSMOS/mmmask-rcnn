@@ -38,14 +38,14 @@ class Featurizer(nn.Module):
                                                 cfg.MIN_SIZE,
                                                 cfg.NMS_THRESHOLD)
 
-    def forward(self, *input):
+    def forward(self, *input,**kwargs):
         """
         Delegation function
         :param input:
         :return: [N x L x H x W x K], [N x L x 4] convolutional maps and locations
         """
         if self.method == "CONNECTED_COMPONENTS":
-            windows = self._forward_CC(*input)
+            windows = self._forward_CC(*input, **kwargs)
         else:
             windows = self._forward_RPN(*input)
         return windows

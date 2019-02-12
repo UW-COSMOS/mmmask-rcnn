@@ -75,11 +75,9 @@ class HeadTargetLayer(nn.Module):
         bbox_deltas = torch.stack(bbox_lst)
         bbox_deltas = bbox_deltas.reshape(N, L, 4)
         # now we can apply the bbox deltas to the RoIs
-        print(bbox_deltas)
-        pred = rois# +bbox_deltas
+        pred = rois#+bbox_deltas
         # Now produce matches [L x 1]
         cls_loss = 0
-        rois = rois.reshape(1,-1,4)
         for idx, (gt_cls, gt_box) in enumerate(zip(gt_clses, gt_boxes)):
             pred_batch = pred[idx]
             gt_box = gt_box.squeeze(0)
@@ -87,7 +85,6 @@ class HeadTargetLayer(nn.Module):
             pos_mask = matches >= 0
             pos_inds = pos_mask.nonzero()
             pos_inds = pos_inds.reshape(-1)
-            #sample down the negative points
             # build the positive labels
             gt_indxs = matches[pos_inds].long()
             gt_labels = gt_cls[gt_indxs].long()

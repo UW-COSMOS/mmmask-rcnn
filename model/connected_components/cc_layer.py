@@ -21,7 +21,11 @@ class CCLayer(nn.Module):
         if proposals is None:
             proposals = get_components(img)
         windows = []
-        for proposal in proposals:
+        if len(proposals) > 1:
+            raise ValueError("The CCLayer does not yet support batches greater than 1")
+        proposals_lst = proposals[0]
+        proposals_lst = proposals_lst.tolist()
+        for proposal in proposals_lst:
             window = self.warp(img, proposal, device)
             windows.append(window)
         windows = torch.stack(windows)
@@ -34,7 +38,8 @@ class CCLayer(nn.Module):
         :param proposal:
         :return:
         """
-        img = self.pil(img)
+
+        img = self.pil(img.squeeze(0))
         img = img.crop(proposal)
         img = img.resize((self.warped_size, self.warped_size))
         tens = self.ten(img)
