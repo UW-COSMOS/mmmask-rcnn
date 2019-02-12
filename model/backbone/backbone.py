@@ -87,6 +87,7 @@ def get_resnet(nlayers=50):
             base.maxpool, base.layer1, base.layer2,
             base.layer3)
     backbone_frozen.requires_grad = False
+    base.layer4.requires_grad = False
     backbone = nn.Sequential(backbone_frozen, base.layer4)
     return backbone
 

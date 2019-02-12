@@ -1,14 +1,15 @@
 import torch
 from torch import nn
 from model.connected_components.connected_components import get_components
-from torchvision.transforms import ToPILImage, ToTensor
+from multiprocessing import Pool
+
 
 class CCLayer(nn.Module):
+    
     def __init__(self, cfg):
         super(CCLayer, self).__init__()
         self.warped_size = cfg.CC_LAYER.WARPED_SIZE
-        self.pil = ToPILImage()
-        self.ten = ToTensor()
+        self.pool = Pool(processes=6)
 
     def forward(self, img, device, proposals=None):
         """
@@ -20,29 +21,30 @@ class CCLayer(nn.Module):
         """
         if proposals is None:
             proposals = get_components(img)
-        windows = []
         if len(proposals) > 1:
             raise ValueError("The CCLayer does not yet support batches greater than 1")
         proposals_lst = proposals[0]
         proposals_lst = proposals_lst.tolist()
-        for proposal in proposals_lst:
-            window = self.warp(img, proposal, device)
-            windows.append(window)
+        windows = [self.pool.apply_async(CCLayer.warp, args=(img, p, self.warped_size, device)) for p in proposals_lst]
+        windows = [w.get() for w in windows]
         windows = torch.stack(windows)
         return windows, proposals
 
-    def warp(self,img, proposal, device):
+    def warp(img, proposal,warped_size, device):
         """
         warp an image to a fixed size
         :param img:
         :param proposal:
         :return:
         """
-
+        import torch
+        from torchvision.transforms import ToPILImage, ToTensor
+        pil = ToPILImage()
+        ten = ToTensor()
         img = img.to(torch.device("cpu"))
-        img = self.pil(img.squeeze(0))
+        img = pil(img.squeeze(0))
         img = img.crop(proposal)
-        img = img.resize((self.warped_size, self.warped_size))
-        tens = self.ten(img)
+        img = img.resize((warped_size, warped_size))
+        tens = ten(img)
         return tens.to(device)
 

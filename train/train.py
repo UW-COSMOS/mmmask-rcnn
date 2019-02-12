@@ -76,8 +76,8 @@ class TrainerHelper:
         train_loader = DataLoader(self.train_set,
                             batch_size=self.params["BATCH_SIZE"],
                             collate_fn=partial(collate,cls_dict=self.cls),
-                            pin_memory=True,
-                            num_workers=3)
+                            num_workers=3,
+                            shuffle=True)
                             
         self.model.train(mode=True)
         iter = 0
@@ -88,7 +88,6 @@ class TrainerHelper:
                 optimizer.zero_grad()
                 ex, gt_box, gt_cls, proposals = batch
                 ex = ex.to(self.device)
-                proposals = [p.to(self.device) for p in proposals]
                 gt_cls = [gt.to(self.device) for gt in gt_cls]
                 gt_box = prep_gt_boxes(gt_box, self.device)
                 rois, cls_preds, cls_scores, bbox_deltas = self.model(ex, self.device, proposals=proposals)
@@ -102,11 +101,16 @@ class TrainerHelper:
                 loss.backward()
                 nn.utils.clip_grad_value_(self.model.parameters(), 5)
                 optimizer.step()
-                if idx % self.params["PRINT_PERIOD"] == 0:
+                if idx % self.params["PRINT_PERIOD"] == 0 and idx != 0:
                     del loss 
                     del cls_loss
                     del cls_preds
                     del cls_scores
+                    del ex
+                    del gt_box
+                    del rois
+                    del bbox_deltas
+                    del proposals
                     torch.cuda.empty_cache()
                     val_loader = DataLoader(self.val_set,
                             batch_size=self.params["BATCH_SIZE"],
@@ -133,7 +137,7 @@ class TrainerHelper:
         self.model.eval()
         tot_cls_loss = 0.0
         torch.cuda.empty_cache()
-        for batch in loader:
+        for batch in tqdm(loader, desc="validation"):
             ex, gt_box, gt_cls, proposals = batch
             ex = ex.to(self.device)
             gt_box = gt_box
