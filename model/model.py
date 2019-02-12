@@ -7,6 +7,7 @@ from torch import nn
 from model.layers.featurization import Featurizer
 from model.head.object_classifier import MultiModalClassifier
 from model.utils.config_manager import ConfigManager
+from model.utils.shape_utils import get_shape_info
 class MMFasterRCNN(nn.Module):
     def __init__(self, cfg):
         """
@@ -16,10 +17,11 @@ class MMFasterRCNN(nn.Module):
         super(MMFasterRCNN, self).__init__()
         cfg = ConfigManager(cfg)
         self.featurizer = Featurizer(cfg)
-        self.head = MultiModalClassifier(cfg.HEAD_HEIGHT,
-                                         cfg.HEAD_WIDTH,
-                                         cfg.HEAD_DEPTH,
-                                         cfg.HEAD_DIM,
+        N, H, W, D = get_shape_info(self.featurizer.backbone, (1, 3, cfg.CC_LAYER.WARPED_SIZE, cfg.CC_LAYER.WARPED_SIZE))
+        self.head = MultiModalClassifier(H,
+                                         W,
+                                         D,
+                                         cfg.HEAD.DIM,
                                          len(cfg.CLASSES))
 
 
@@ -28,7 +30,7 @@ class MMFasterRCNN(nn.Module):
         Process an Image through the network
         """
         maps, proposals = self.featurizer(*inputs)
-        cls_preds, cls_scores, bbox_deltas = self.classification_head(maps)
+        cls_preds, cls_scores, bbox_deltas = self.head(maps)
         return proposals, cls_preds, cls_scores, bbox_deltas
 
 

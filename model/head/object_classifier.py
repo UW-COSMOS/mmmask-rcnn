@@ -30,8 +30,8 @@ class MultiModalClassifier(nn.Module):
         self.FC = nn.Linear(self.height*self.width*self.depth, intermediate)
         self.FC_2 = nn.Linear(intermediate, intermediate)
         # background class
-        self.cls_branch = nn.Linear(intermediate+2, ncls)
-        self.bbox_branch = nn.Linear(intermediate+2, 4*ncls)
+        self.cls_branch = nn.Linear(intermediate, ncls)
+        self.bbox_branch = nn.Linear(intermediate, 4*ncls)
 
 
     def forward(self, roi_maps, proposals=None):

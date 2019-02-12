@@ -85,14 +85,8 @@ def get_resnet(nlayers=50):
     # now build from the base a sequential object with the subpieces of the network
     backbone_frozen = nn.Sequential(base.conv1, base.bn1, base.relu,
             base.maxpool, base.layer1, base.layer2,
-            base.layer3)
-    #dont keep parameters gradients for ConvNet
-    #for param in backbone_frozen.parameters():
-	#		  param.requires_grad = False
-    shared = base.layer4
-    #shared.requires_grad = True
-    backbone_frozen.output_depth = 2048
-    return backbone_frozen, shared
+            base.layer3, base.layer4)
+    return backbone_frozen
 
 if __name__ == '__main__':
     pass

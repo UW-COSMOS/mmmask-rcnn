@@ -15,9 +15,9 @@ class Featurizer(nn.Module):
         Initialize a featurizer layer
         :param cfg: A model config to read from
         """
-        super(self, )
-        self.backbone = get_backbone(cfg.backbone)
-        self.method = cfg.featurizer_method
+        super(Featurizer, self).__init__()
+        self.backbone = get_backbone(cfg.BACKBONE)
+        self.method = cfg.PROPOSAL_METHOD
         self.RPN = None
         self.ROI_Align = None
         self.proposal_layer = None
@@ -62,7 +62,7 @@ class Featurizer(nn.Module):
     def _forward_CC(self, imgs, device, proposals=None):
         image_windows, proposals = self.cc(imgs, device, proposals)
         windows = self.backbone(image_windows)
-        return windows, proposals
+        return windows.unsqueeze(0), proposals
 
     def get_RPN_outputs(self):
         return self.RPN_history
