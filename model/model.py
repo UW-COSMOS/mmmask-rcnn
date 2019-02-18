@@ -31,8 +31,8 @@ class MMFasterRCNN(nn.Module):
         Process an Image through the network
         """
         maps, proposals = self.featurizer(*inputs, **kwargs)
-        cls_preds, cls_scores, bbox_deltas = self.head(maps)
-        return proposals, cls_preds, cls_scores, bbox_deltas
+        cls_scores = self.head(maps)
+        return proposals,  cls_scores
 
 
     def set_weights(self,mean, std):

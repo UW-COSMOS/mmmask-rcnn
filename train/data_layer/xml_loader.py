@@ -6,7 +6,8 @@ Author: Josh McGrath
 from torch.utils.data import Dataset
 import os
 from os.path import splitext
-from skimage import io
+from PIL import Image
+from torchvision.transforms import ToTensor
 from numpy import genfromtxt
 from utils.boundary_utils import centers_size
 import torch
@@ -18,7 +19,7 @@ from .transforms import NormalizeWrapper
 normalizer = NormalizeWrapper(mean=[0.485, 0.456, 0.406],
         std=[0.229, 0.224, 0.225])
 
-
+tens = ToTensor()
                                                                         
 
 def mapper(obj, preprocessor=None):
@@ -65,12 +66,9 @@ def load_image(base_path, identifier, img_type):
     :return: [3 x SIZE x SIZE] tensor
     """
     path = os.path.join(base_path, f"{identifier}.{img_type}")
-    # reads in as [SIZE x SIZE x 3]
-    img_data = io.imread(path)
-    img_data = img_data.transpose((2, 0, 1))
-    img_data = torch.from_numpy(img_data).float()
-    # squash values into [0,1]
-    img_data = img_data / 255.0
+    pil = Image.open(path)
+    img_data = tens(pil)
+    pil.close()
     img_data = normalizer(img_data)
     return img_data
 

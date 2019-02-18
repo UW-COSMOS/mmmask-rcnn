@@ -83,12 +83,8 @@ def get_resnet(nlayers=50):
     else:
         raise NotImplementedError()
     # now build from the base a sequential object with the subpieces of the network
-    backbone_frozen = nn.Sequential(base.conv1, base.bn1, base.relu,
-            base.maxpool, base.layer1, base.layer2,
-            base.layer3)
-    backbone_frozen.requires_grad = False
-    base.layer4.requires_grad = False
-    backbone = nn.Sequential(backbone_frozen, base.layer4)
+    backbone = nn.Sequential(*list(base.children())[:-2])
+    backbone.requires_grad = False
     return backbone
 
 if __name__ == '__main__':

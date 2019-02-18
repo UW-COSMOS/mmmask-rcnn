@@ -7,6 +7,7 @@ import torch
 from  torch import nn
 from os.path import join, isdir
 from os import mkdir
+import os
 from torch import optim
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -42,8 +43,7 @@ def format(bytes):
 
 
 def prep_gt_boxes(boxes, device):
-    boxes = [box.reshape(-1, 4).float().to(device) for box in boxes]
-    boxes = [box.reshape(1,-1,4) for box in boxes]
+    boxes = [box.reshape(1,-1, 4).float().to(device) for box in boxes]
     return boxes
 
 class TrainerHelper:
@@ -55,6 +55,7 @@ class TrainerHelper:
         :param params: a dictionary of training specific parameters
         """
         self.model = model.to(device)
+        self.detect_weights(params["SAVE_DIR"])
         val_size = params["VAL_SIZE"]
         train_size = len(dataset) - val_size
         self.train_set, self.val_set = random_split(dataset, (train_size, val_size))
@@ -68,6 +69,13 @@ class TrainerHelper:
 
                                      
 
+    def detect_weights(self,weights_dir):
+        ls = os.listdir(weights_dir)
+        if len(ls) == 0:
+            return
+        path = join(weights_dir, ls[:-1])
+        print(f"loading weights from {path}")
+        self.model.load_state_dict(torch.load(path))
 
     def train(self):
         optimizer = optim.Adam(self.model.parameters(), 
@@ -76,26 +84,22 @@ class TrainerHelper:
         train_loader = DataLoader(self.train_set,
                             batch_size=self.params["BATCH_SIZE"],
                             collate_fn=partial(collate,cls_dict=self.cls),
-                            num_workers=3,
+                            num_workers=5,
                             shuffle=True)
                             
-        self.model.train(mode=True)
+        self.model.train(mode=False)
         iter = 0
         tot_cls_loss = 0.0
-        tot_bbox_loss = 0.0
         for epoch in tqdm(range(self.params["EPOCHS"]),desc="epochs"):
             for idx, batch in enumerate(tqdm(train_loader, desc="batches", leave=False)):
                 optimizer.zero_grad()
                 ex, gt_box, gt_cls, proposals = batch
-                ex = ex.to(self.device)
                 gt_cls = [gt.to(self.device) for gt in gt_cls]
                 gt_box = prep_gt_boxes(gt_box, self.device)
-                rois, cls_preds, cls_scores, bbox_deltas = self.model(ex, self.device, proposals=proposals)
-                N = len(rois)
-                for i in range(N):
-                    rois[i] = centers_size(rois[i])
+                rois, cls_scores= self.model(ex, self.device, proposals=proposals)
+                rois = [centers_size(roi) for roi in rois]
                 cls_loss = self.head_target_layer(rois,
-                        cls_scores, bbox_deltas, gt_box, gt_cls, self.device)
+                        cls_scores, gt_box, gt_cls, self.device)
                 loss = cls_loss
                 tot_cls_loss += float(cls_loss)
                 loss.backward()
@@ -104,28 +108,16 @@ class TrainerHelper:
                 if idx % self.params["PRINT_PERIOD"] == 0 and idx != 0:
                     del loss 
                     del cls_loss
-                    del cls_preds
                     del cls_scores
                     del ex
                     del gt_box
                     del rois
-                    del bbox_deltas
                     del proposals
-                    torch.cuda.empty_cache()
-                    val_loader = DataLoader(self.val_set,
-                            batch_size=self.params["BATCH_SIZE"],
-                            collate_fn=partial(collate,cls_dict=self.cls),
-                            pin_memory=True,
-                            num_workers=3)
-
-
-                    self.validate(val_loader, iter)
+                    self.validate(iter)
                     if not (idx == 0 and epoch ==0):
-                        self.writer.add_scalar("train_cls_loss", tot_cls_loss, iter)
+                        self.writer.add_scalar("train_cls_loss", tot_cls_loss/len(self.train_set), iter)
                         tot_cls_loss = 0.0
-                        tot_bbox_loss = 0.0
                     iter += 1
-                    del val_loader
             if epoch % self.params["CHECKPOINT_PERIOD"] == 0:
                 name = f"model_{epoch}.pth"
                 path = join(self.params["SAVE_DIR"], name)
@@ -133,33 +125,31 @@ class TrainerHelper:
                     mkdir(self.params["SAVE_DIR"])
                 torch.save(self.model.state_dict(), path)
 
-    def validate(self,loader,iter):
-        self.model.eval()
+    def validate(self,iter):
+        loader = DataLoader(self.val_set,
+                            batch_size=self.params["BATCH_SIZE"],
+                            collate_fn=partial(collate,cls_dict=self.cls),
+                            num_workers=3)
         tot_cls_loss = 0.0
         torch.cuda.empty_cache()
         for batch in tqdm(loader, desc="validation"):
             ex, gt_box, gt_cls, proposals = batch
-            ex = ex.to(self.device)
             gt_box = gt_box
             gt_cls = [gt.to(self.device) for gt in gt_cls]
             gt_box = prep_gt_boxes(gt_box, self.device)
             # forward pass
-            rois, cls_preds, cls_scores, bbox_deltas = self.model(ex, self.device, proposals=proposals)
+            rois, cls_scores, = self.model(ex, self.device, proposals=proposals)
             # calculate losses
-            cls_preds = cls_preds.squeeze(0)
-            L ,ncls = cls_preds.shape
-            preds, idxs = torch.max(cls_preds, dim=1)
             rois = centers_size(rois[0])
             rois = rois.unsqueeze(0).to(self.device).float()
             cls_loss = self.head_target_layer(rois,
-                    cls_scores, bbox_deltas, gt_box, gt_cls, self.device)
+                    cls_scores, gt_box, gt_cls, self.device)
             # update batch losses, cast as float so we don't keep gradient history
             tot_cls_loss += float(cls_loss)
         self.output_batch_losses(
-                                 tot_cls_loss,
+                                 tot_cls_loss/len(self.val_set),
                                  iter) 
 
-        self.model.train()
 
 
     def output_batch_losses(self,  cls_loss,iter ):

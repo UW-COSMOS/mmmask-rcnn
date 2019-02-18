@@ -29,9 +29,7 @@ class MultiModalClassifier(nn.Module):
         self.dropout = nn.Dropout(p=0.3)
         self.FC = nn.Linear(self.height*self.width*self.depth, intermediate)
         self.FC_2 = nn.Linear(intermediate, intermediate)
-        # background class
         self.cls_branch = nn.Linear(intermediate, ncls)
-        self.bbox_branch = nn.Linear(intermediate, 4*ncls)
 
 
     def forward(self, roi_maps, proposals=None):
@@ -49,12 +47,5 @@ class MultiModalClassifier(nn.Module):
         x = self.dropout(x)
         x = relu(x)
         cls_scores = self.cls_branch(x)
-        bbox_scores = self.bbox_branch(x)
-        return softmax(cls_scores, dim=2), cls_scores, bbox_scores
-
-    def featurize_proposals(self, proposals):
-        w = proposals[:, X2] - proposals[:, X]
-        h = proposals[:, Y2] - proposals[:, Y]
-        return torch.stack((w,h),dim =1).unsqueeze(0).float()
-
+        return  cls_scores
 
