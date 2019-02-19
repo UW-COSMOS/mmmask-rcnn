@@ -9,18 +9,20 @@ from os.path import splitext
 from PIL import Image
 from torchvision.transforms import ToTensor
 from numpy import genfromtxt
-from utils.boundary_utils import centers_size
+import redis
 import torch
 from xml.etree import ElementTree as ET
 from .transforms import NormalizeWrapper
-
-
-
+import pickle
+from utils.matcher import match
+from collections import namedtuple
+from uuid import uuid4
+from tqdm import tqdm
 normalizer = NormalizeWrapper(mean=[0.485, 0.456, 0.406],
         std=[0.229, 0.224, 0.225])
 
 tens = ToTensor()
-                                                                        
+Example = namedtuple('Example', ["ex_window", "ex_proposal", "gt_cls", "gt_box"])
 
 def mapper(obj, preprocessor=None):
     """
@@ -67,10 +69,7 @@ def load_image(base_path, identifier, img_type):
     """
     path = os.path.join(base_path, f"{identifier}.{img_type}")
     pil = Image.open(path)
-    img_data = tens(pil)
-    pil.close()
-    img_data = normalizer(img_data)
-    return img_data
+    return pil
 
 def load_proposal(base_path, identifier):
     """
@@ -106,7 +105,9 @@ class XMLLoader(Dataset):
     it is expected that the directories have no files
     other than annotations
     """
-    def __init__(self, img_dir,xml_dir=None, proposal_dir=None, img_type="jpg"):
+
+
+    def __init__(self, img_dir,xml_dir=None, proposal_dir=None,warped_size=300, img_type="jpg", host="redis"):
         """
         Initialize a XML loader object
         :param xml_dir: directory to get XML from
@@ -117,23 +118,69 @@ class XMLLoader(Dataset):
         self.img_dir = img_dir
         self.proposal_dir = proposal_dir
         self.img_type = img_type
+        self.warped_size = warped_size
         self.imgs = os.listdir(img_dir)
         self.identifiers = [splitext(img)[0] for img in self.imgs]
+        self.uuids = []
         self.num_images = len(self.imgs)
-        print(f"Constructed a {self.num_images} image dataset")
+        print(f"Constructed a {self.num_images} image dataset, ingesting to redis server")
+        self.db = redis.Redis(host=host)
+        self.class_stats = {}
+
+        self._ingest()
 
     def __len__(self):
-        return self.num_images
+        return len(self.uuids)
 
     def __getitem__(self, item):
-        identifier = self.identifiers[item]
-        img = load_image(self.img_dir, identifier, self.img_type)
-        gt = None
-        proposals = None
-        if self.xml_dir is not None:
-            gt = load_gt(self.xml_dir, identifier)
-        if self.proposal_dir is not None:
-            proposals = load_proposal(self.proposal_dir, identifier)
-        ret = [img, gt, proposals, identifier]
-        ret = filter(lambda x: x is not None, ret)
-        return list(ret)
+        bytes_rep = self.db.get(self.uuids[item])
+        lst = pickle.loads(bytes_rep)
+        return lst
+
+    def _ingest(self):
+        for identifier in tqdm(self.identifiers):
+            img = load_image(self.img_dir, identifier, self.img_type)
+            gt = None
+            proposals = None
+            if self.xml_dir is not None:
+                gt = load_gt(self.xml_dir, identifier)
+            if self.proposal_dir is not None:
+                proposals = load_proposal(self.proposal_dir, identifier)
+            ret = [img, gt, proposals, identifier]
+            pts = self._unpack_page(ret)
+            for pt in pts:
+                uuid = str(uuid4())
+                self.uuids.append(uuid)
+                label = pt.gt_cls
+                if label in self.class_stats:
+                    self.class_stats[label] +=1
+                else:
+                    self.class_stats[label] = 1
+                obj = pickle.dumps(pt)
+                self.db.set(uuid, obj)
+
+
+
+    def _unpack_page(self, page):
+        img, gt, proposals, identifier = page
+        gt_boxes, gt_cls = gt
+        matches = match(proposals.float(),gt_boxes)
+        labels = [gt_cls[match] for match in matches]
+        windows = []
+        proposals_lst = proposals.tolist()
+        gt_box_lst = gt_boxes.tolist()
+        for proposal in proposals_lst:
+            img_sub = img.crop(proposal)
+            img_sub = img_sub.resize((self.warped_size, self.warped_size))
+            img_data = tens(img_sub)
+            img_data = normalizer(img_data)
+            windows.append(img_data)
+        #switch to list of tensors
+        proposals_lst = [torch.tensor(prop) for prop in proposals_lst]
+        gt_box_lst = [torch.tensor(gt_box) for gt_box in gt_box_lst]
+        collected = list(zip(windows,proposals_lst, labels, gt_box_lst))
+        ret = [Example(*pt) for pt in collected]
+        return ret
+
+
+

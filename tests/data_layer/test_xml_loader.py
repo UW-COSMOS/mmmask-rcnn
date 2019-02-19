@@ -11,12 +11,16 @@ class TestXMLLoader(unittest.TestCase):
         self.img_dir = join(data_dir, "images")
         self.proposal_dir = join(data_dir, "proposals")
         self.img_type = "jpg"
+        self.host="localhost"
+        self.warped_size = 300
 
     def test_init(self):
         loader = XMLLoader(self.img_dir,
                            self.xml_dir,
                            self.proposal_dir,
-                           self.img_type)
+                           self.warped_size,
+                           self.img_type,
+                           self.host)
 
         self.assertIsNotNone(loader)
 
@@ -24,30 +28,36 @@ class TestXMLLoader(unittest.TestCase):
         loader = XMLLoader(self.img_dir,
                            self.xml_dir,
                            self.proposal_dir,
-                           self.img_type)
-        img, gt, proposals, id = loader[0]
-        self.assertIsInstance(img, torch.Tensor)
-        self.assertEqual(img.shape[2], 500)
-        self.assertEqual(img.shape[0], 3)
+                           self.warped_size,
+                           self.img_type,
+                           self.host)
+        pt = loader[0]
+        self.assertIsInstance(pt.ex_window, torch.Tensor)
+        self.assertEqual(pt.ex_window.shape[2], self.warped_size)
+        self.assertEqual(pt.ex_window.shape[0], 3)
 
     def test_load_gt(self):
         loader = XMLLoader(self.img_dir,
                            self.xml_dir,
                            self.proposal_dir,
-                           self.img_type)
-        img, gt, proposals, id = loader[0]
-        tens, cls_names = gt
-        self.assertIsInstance(tens, torch.Tensor)
-        self.assertEqual(tens.shape[1], 4)
-        self.assertEqual(tens.shape[0], len(cls_names))
+                           self.warped_size,
+                           self.img_type,
+                           self.host)
+        pt = loader[0]
+
+        self.assertIsInstance(pt.ex_window, torch.Tensor)
+        self.assertEqual(pt.gt_box.shape[0], 4)
+
 
     def load_no_gt(self):
         loader = XMLLoader(self.img_dir,
                            xml_dir=None,
                            proposal_dir=self.proposal_dir,
-                           img_type=self.img_type)
+                           warped_size=self.warped_size,
+                           img_type=self.img_type,
+                           host=self.host)
         res = loader[0]
-        self.assertEqual(len(res), 3)
+        self.assertEqual(len(res), 4)
 
 
 

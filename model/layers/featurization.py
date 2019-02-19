@@ -59,10 +59,9 @@ class Featurizer(nn.Module):
         windows = self.ROI_Align(proposals)
         return windows, proposals
 
-    def _forward_CC(self, imgs, device, proposals=None):
-        image_windows, proposals = self.cc(imgs, device, proposals)
-        windows = self.backbone(image_windows)
-        return windows.unsqueeze(0), proposals
+    def _forward_CC(self, img_windows, proposals=None):
+        windows = self.backbone(img_windows)
+        return windows, proposals
 
     def get_RPN_outputs(self):
         return self.RPN_history

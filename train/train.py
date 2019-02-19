@@ -97,9 +97,8 @@ class TrainerHelper:
                 gt_cls = [gt.to(self.device) for gt in gt_cls]
                 gt_box = prep_gt_boxes(gt_box, self.device)
                 rois, cls_scores= self.model(ex, self.device, proposals=proposals)
-                rois = [centers_size(roi) for roi in rois]
-                cls_loss = self.head_target_layer(rois,
-                        cls_scores, gt_box, gt_cls, self.device)
+                print(f"cls scores shape:{cls_scores.shape}")
+                cls_loss = self.head_target_layer(cls_scores, gt_cls, self.device)
                 loss = cls_loss
                 tot_cls_loss += float(cls_loss)
                 loss.backward()

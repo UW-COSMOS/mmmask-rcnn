@@ -27,7 +27,7 @@ class HeadTargetLayer(nn.Module):
         :param gt_cls:[Mx1] cls_idx
         :return:
         """
-        N, L, C = cls_scores.shape
+        N, C = cls_scores.shape
         pred = rois
         cls_loss = 0
         for idx, (gt_cls, gt_box) in enumerate(zip(gt_clses, gt_boxes)):
