@@ -19,7 +19,6 @@ import multiprocessing as mp
 from  model.connected_components.connected_components import write_proposals
 from model.model import MMFasterRCNN
 from train.data_layer.xml_loader import XMLLoader
-from train.data_layer.gt_dataset import GTDataset
 from utils.voc_utils import ICDAR_convert
 
 # PDF directory path
@@ -43,7 +42,7 @@ if not os.path.exists('html'):
 img_d = os.path.join('tmp', 'images2')
 
 def preprocess_pngs(img_f):
-    pth, padded_img = pp.pad_image(os.path.join('images', img_f))
+    pth, padded_img = pp.pad_image(os.path.join('tmp/images', img_f))
     if pth is not None:
         padded_img.save(os.path.join(img_d, img_f))
 
@@ -55,12 +54,11 @@ def convert_to_html(xml_f):
 pool = mp.Pool(processes=240)
 
 print('Begin writing proposals')
-#[write_proposals(os.path.join('tmp', 'images', x)) for x in os.listdir(os.path.join('tmp', 'images'))]
-results = [pool.apply_async(write_proposals, args=(os.path.join('images', x),)) for x in os.listdir('images')]
+results = [pool.apply_async(write_proposals, args=(os.path.join('tmp/images', x),)) for x in os.listdir('tmp/images')]
 [r.get() for r in results]
 
 print('Begin preprocessing pngs')
-results = [pool.apply_async(preprocess_pngs, args=(x,)) for x in os.listdir(os.path.join('images'))]
+results = [pool.apply_async(preprocess_pngs, args=(x,)) for x in os.listdir(os.path.join('tmp/images'))]
 [r.get() for r in results]
 
 with open('test.txt', 'w') as wf:
@@ -69,16 +67,14 @@ with open('test.txt', 'w') as wf:
 
 shutil.move('test.txt', 'tmp/test.txt')
 
-loader = XMLLoader(None, img_d, 'tmp/cc_proposals', 'png')
-dataset = GTDataset(loader)
+dataset = XMLLoader(img_d,proposal_dir='tmp/cc_proposals', img_type='png')
 loader = DataLoader(dataset, batch_size=1)
 device = None
 if torch.cuda.is_available():
     device = torch.device("cuda")
 else:
     device = torch.device("cpu")
-model_config = yaml.load(open('model_config.yaml').read())
-model = MMFasterRCNN(model_config)
+model = MMFasterRCNN("model_new.yaml")
 if args.weights is not None:
     model.load_state_dict(torch.load(args.weights))
 else:
