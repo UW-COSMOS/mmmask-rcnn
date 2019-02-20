@@ -3,7 +3,7 @@ import torch
 NEGATIVE = -1
 NEITHER = -2
 
-def match(regions, gt_boxes, device=torch.device("cpu")):
+def match(regions, gt_boxes, device=torch.device("cpu"), silence=False):
     """
     Get positive region indexes for each box
     :param regions: predicted regions [KA x 4]
@@ -17,8 +17,16 @@ def match(regions, gt_boxes, device=torch.device("cpu")):
     # get ious for each predicted box and gt target
     # get back an NxM tensor of IOUs
     overlaps = bbox_overlaps(regions, gt_boxes, device)
+    assert overlaps.shape[0] == regions.shape[0]
+    assert overlaps.shape[1] == gt_boxes.shape[0]
+    
     # now we need the highest iou wrt to each
     # get back a vector indexed by gt_boxes which we need to
     # index back to targets
     best_score_pred, match_idxs_pred = torch.max(overlaps, dim=1)
+    mask = best_score_pred == 0
+    if mask.sum() > 0:
+        print(mask.sum())
+
     return match_idxs_pred
+

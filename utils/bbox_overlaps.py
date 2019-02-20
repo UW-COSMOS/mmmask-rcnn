@@ -21,6 +21,7 @@ def get_iou(bboxes, gt_box, device):
     gt_box = gt_box.expand(L, 4)
     # convert to x1, y1, x2, y2
     coords_bbox = absolute_coords(bboxes, device)
+
     # do the same for the ground truth
     coords_gt = absolute_coords(gt_box, device)
     # now use this to compute the aligned IoU

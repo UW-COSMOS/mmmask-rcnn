@@ -80,7 +80,7 @@ class TrainerHelper:
         train_loader = DataLoader(self.train_set,
                             batch_size=self.params["BATCH_SIZE"],
                             collate_fn=partial(collate,cls_dict=self.cls),
-                            num_workers=2,
+                            num_workers=self.params["BATCH_SIZE"],
                             shuffle=True)
                             
         self.model.train(mode=False)
@@ -129,16 +129,15 @@ class TrainerHelper:
         torch.cuda.empty_cache()
         for batch in tqdm(loader, desc="validation"):
             ex, gt_box, gt_cls, proposals = batch
+            ex = ex.to(self.device)
             gt_box = gt_box
-            gt_cls = [gt.to(self.device) for gt in gt_cls]
+            gt_cls = gt_cls.to(self.device)
             gt_box = prep_gt_boxes(gt_box, self.device)
             # forward pass
             rois, cls_scores, = self.model(ex, self.device, proposals=proposals)
             # calculate losses
-            rois = centers_size(rois[0])
-            rois = rois.unsqueeze(0).to(self.device).float()
-            cls_loss = self.head_target_layer(rois,
-                    cls_scores, gt_box, gt_cls, self.device)
+            cls_loss = self.head_target_layer(
+                    cls_scores, gt_cls, self.device)
             # update batch losses, cast as float so we don't keep gradient history
             tot_cls_loss += float(cls_loss)
         self.output_batch_losses(

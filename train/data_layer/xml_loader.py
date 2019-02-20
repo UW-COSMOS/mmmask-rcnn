@@ -18,6 +18,7 @@ from utils.matcher import match
 from collections import namedtuple
 from uuid import uuid4
 from tqdm import tqdm
+from utils.boundary_utils import centers_size
 normalizer = NormalizeWrapper(mean=[0.485, 0.456, 0.406],
         std=[0.229, 0.224, 0.225])
 
@@ -124,11 +125,20 @@ class XMLLoader(Dataset):
         self.uuids = []
         self.num_images = len(self.imgs)
         self.pool = redis.ConnectionPool(host=host)
+        self.no_overlaps = []
+        self.ngt_boxes = 0
+        self.nproposals = 0
         print(f"Constructed a {self.num_images} image dataset, ingesting to redis server")
         self.class_stats = {}
         self._ingest()
         print("ingested to redis, printing class stats")
         self.print_stats()
+        print(f"# of gt boxes:{self.ngt_boxes}")
+        print(f"# of proposals:{self.nproposals}")
+        with open("no_overlaps.txt","w") as fh:
+            for identifier in self.no_overlaps:
+                fh.write(f"{identifier}\n")
+        
 
 
     def __len__(self):
@@ -166,11 +176,13 @@ class XMLLoader(Dataset):
     def _unpack_page(self, page):
         img, gt, proposals, identifier = page
         gt_boxes, gt_cls = gt
-        matches = match(proposals.float(),gt_boxes)
+        matches = match(proposals,gt_boxes)
         labels = [gt_cls[match] for match in matches]
         windows = []
         proposals_lst = proposals.tolist()
+        self.nproposals += len(proposals_lst)
         gt_box_lst = gt_boxes.tolist()
+        self.ngt_boxes += len(gt_box_lst)
         for proposal in proposals_lst:
             img_sub = img.crop(proposal)
             img_sub = img_sub.resize((self.warped_size, self.warped_size))
@@ -180,7 +192,7 @@ class XMLLoader(Dataset):
         # switch to list of tensors
         proposals_lst = [torch.tensor(prop) for prop in proposals_lst]
         gt_box_lst = [torch.tensor(gt_box) for gt_box in gt_box_lst]
-        collected = list(zip(windows,proposals_lst, labels, gt_box_lst))
+        collected = list(zip(windows,gt_box_lst, labels, gt_box_lst))
         ret = [Example(*pt) for pt in collected]
         return ret
 
