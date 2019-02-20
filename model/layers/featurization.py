@@ -59,7 +59,7 @@ class Featurizer(nn.Module):
         windows = self.ROI_Align(proposals)
         return windows, proposals
 
-    def _forward_CC(self, img_windows, proposals=None):
+    def _forward_CC(self, img_windows,device, proposals=None):
         windows = self.backbone(img_windows)
         return windows, proposals
 

@@ -123,21 +123,23 @@ class XMLLoader(Dataset):
         self.identifiers = [splitext(img)[0] for img in self.imgs]
         self.uuids = []
         self.num_images = len(self.imgs)
+        self.host = host
         print(f"Constructed a {self.num_images} image dataset, ingesting to redis server")
-        self.db = redis.Redis(host=host)
         self.class_stats = {}
-
         self._ingest()
+        print("ingested to redis")
 
     def __len__(self):
         return len(self.uuids)
 
     def __getitem__(self, item):
-        bytes_rep = self.db.get(self.uuids[item])
+        conn = redis.Redis(host=self.host)
+        bytes_rep = conn.get(self.uuids[item])
         lst = pickle.loads(bytes_rep)
         return lst
 
     def _ingest(self):
+        conn = redis.Redis(host=self.host)
         for identifier in tqdm(self.identifiers):
             img = load_image(self.img_dir, identifier, self.img_type)
             gt = None
@@ -157,9 +159,7 @@ class XMLLoader(Dataset):
                 else:
                     self.class_stats[label] = 1
                 obj = pickle.dumps(pt)
-                self.db.set(uuid, obj)
-
-
+                conn.set(uuid, obj)
 
     def _unpack_page(self, page):
         img, gt, proposals, identifier = page

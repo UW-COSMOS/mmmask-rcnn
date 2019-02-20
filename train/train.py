@@ -11,19 +11,16 @@ import os
 from torch import optim
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-from train.anchor_targets.anchor_target_layer import AnchorTargetLayer
 from train.anchor_targets.head_target_layer import HeadTargetLayer
 from functools import partial
-import bitmath
 from tensorboardX import SummaryWriter
 from utils.boundary_utils import centers_size
 from torch.utils.data import random_split
 
-def unpack_cls(cls_dict, gt_list):
-    arr = map(lambda x: cls_dict[x], gt_list)
-    return torch.tensor(list(arr))
 
-
+def unpack_cls(cls_dict, gt_label):
+    label = cls_dict[gt_label]
+    return torch.tensor([label])
 
 
 def collate(batch, cls_dict):
@@ -32,19 +29,18 @@ def collate(batch, cls_dict):
     :param batch:
     :return:
     """
-    exs = [item[0] for item in batch]
-    gt_box = [item[1][0] for item in batch]
-    gt_cls = [unpack_cls(cls_dict, item[1][1]) for item in batch]
-    proposals = [item[2] for item in batch]
-    return torch.stack(exs).float(), gt_box, gt_cls, proposals
+    ex_windows = [item.ex_window for item in batch]
+    gt_box = [item.gt_box for item in batch]
+    gt_cls = [unpack_cls(cls_dict, item.gt_cls) for item in batch]
+    proposals = [item.ex_proposal for item in batch]
+    return torch.stack(ex_windows).float(), gt_box, torch.cat(gt_cls), proposals
 
-def format(bytes):
-    return bitmath.Byte(bytes).to_GiB()
 
 
 def prep_gt_boxes(boxes, device):
     boxes = [box.reshape(1,-1, 4).float().to(device) for box in boxes]
     return boxes
+
 
 class TrainerHelper:
     def __init__(self, model, dataset, params,device):
@@ -88,16 +84,15 @@ class TrainerHelper:
                             shuffle=True)
                             
         self.model.train(mode=False)
-        iter = 0
-        tot_cls_loss = 0.0
+        iteration = 0
         for epoch in tqdm(range(self.params["EPOCHS"]),desc="epochs"):
+            tot_cls_loss = 0.0
             for idx, batch in enumerate(tqdm(train_loader, desc="batches", leave=False)):
                 optimizer.zero_grad()
                 ex, gt_box, gt_cls, proposals = batch
-                gt_cls = [gt.to(self.device) for gt in gt_cls]
+                gt_cls = gt_cls.to(self.device)
                 gt_box = prep_gt_boxes(gt_box, self.device)
                 rois, cls_scores= self.model(ex, self.device, proposals=proposals)
-                print(f"cls scores shape:{cls_scores.shape}")
                 cls_loss = self.head_target_layer(cls_scores, gt_cls, self.device)
                 loss = cls_loss
                 tot_cls_loss += float(cls_loss)
@@ -112,11 +107,11 @@ class TrainerHelper:
                     del gt_box
                     del rois
                     del proposals
-                    self.validate(iter)
+                    self.validate(iteration)
                     if not (idx == 0 and epoch ==0):
-                        self.writer.add_scalar("train_cls_loss", tot_cls_loss/len(self.train_set), iter)
+                        self.writer.add_scalar("train_cls_loss", tot_cls_loss / len(self.train_set), iteration)
                         tot_cls_loss = 0.0
-                    iter += 1
+                    iteration += 1
             if epoch % self.params["CHECKPOINT_PERIOD"] == 0:
                 name = f"model_{epoch}.pth"
                 path = join(self.params["SAVE_DIR"], name)
@@ -124,7 +119,7 @@ class TrainerHelper:
                     mkdir(self.params["SAVE_DIR"])
                 torch.save(self.model.state_dict(), path)
 
-    def validate(self,iter):
+    def validate(self, iteration):
         loader = DataLoader(self.val_set,
                             batch_size=self.params["BATCH_SIZE"],
                             collate_fn=partial(collate,cls_dict=self.cls),
@@ -147,7 +142,7 @@ class TrainerHelper:
             tot_cls_loss += float(cls_loss)
         self.output_batch_losses(
                                  tot_cls_loss/len(self.val_set),
-                                 iter) 
+                                 iteration)
 
 
 

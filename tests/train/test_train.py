@@ -17,7 +17,8 @@ class TestTrainingIntegration(unittest.TestCase):
                                 img_type="jpg",
                                 host="localhost")
         self.device = torch.device("cpu")
-        self.params = yaml.load(open("../data/train_config.yaml"))
+        with open("../data/train_config.yaml") as fh:
+            self.params = yaml.load(fh)
 
     def test_init(self):
         trainer = TrainerHelper(self.model,
