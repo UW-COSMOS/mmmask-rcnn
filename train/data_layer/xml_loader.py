@@ -123,7 +123,7 @@ class XMLLoader(Dataset):
         self.identifiers = [splitext(img)[0] for img in self.imgs]
         self.uuids = []
         self.num_images = len(self.imgs)
-        self.host = host
+        self.pool = redis.ConnectionPool(host=host)
         print(f"Constructed a {self.num_images} image dataset, ingesting to redis server")
         self.class_stats = {}
         self._ingest()
@@ -133,13 +133,13 @@ class XMLLoader(Dataset):
         return len(self.uuids)
 
     def __getitem__(self, item):
-        conn = redis.Redis(host=self.host)
+        conn = redis.Redis(connection_pool=self.pool)
         bytes_rep = conn.get(self.uuids[item])
         lst = pickle.loads(bytes_rep)
         return lst
 
     def _ingest(self):
-        conn = redis.Redis(host=self.host)
+        conn = redis.Redis(connection_pool=self.pool)
         for identifier in tqdm(self.identifiers):
             img = load_image(self.img_dir, identifier, self.img_type)
             gt = None
@@ -175,7 +175,7 @@ class XMLLoader(Dataset):
             img_data = tens(img_sub)
             img_data = normalizer(img_data)
             windows.append(img_data)
-        #switch to list of tensors
+        # switch to list of tensors
         proposals_lst = [torch.tensor(prop) for prop in proposals_lst]
         gt_box_lst = [torch.tensor(gt_box) for gt_box in gt_box_lst]
         collected = list(zip(windows,proposals_lst, labels, gt_box_lst))

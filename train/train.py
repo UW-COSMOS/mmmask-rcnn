@@ -69,7 +69,7 @@ class TrainerHelper:
         ls = os.listdir(weights_dir)
         if len(ls) == 0:
             return
-        path = join(weights_dir, ls[:-1])
+        path = join(weights_dir, ls[len(ls) - 1])
         print(f"loading weights from {path}")
         self.model.load_state_dict(torch.load(path))
 
@@ -80,7 +80,7 @@ class TrainerHelper:
         train_loader = DataLoader(self.train_set,
                             batch_size=self.params["BATCH_SIZE"],
                             collate_fn=partial(collate,cls_dict=self.cls),
-                            num_workers=5,
+                            num_workers=2,
                             shuffle=True)
                             
         self.model.train(mode=False)
