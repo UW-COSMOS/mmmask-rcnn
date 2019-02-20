@@ -195,7 +195,10 @@ class XMLLoader(Dataset):
             windows.append(img_data)
         # switch to list of tensors
         proposals_lst = [torch.tensor(prop) for prop in proposals_lst]
-        collected = list(zip(windows,proposals_lst, labels))
+        match_box_lst = []
+        for idx in range(len(proposals_lst)):
+            match_box_lst.append(torch.tensor(gt_box_lst[matches[idx]]))
+        collected = list(zip(windows,proposals_lst, match_box_lst,labels))
         ret = [Example(*pt) for pt in collected]
         return ret
 
