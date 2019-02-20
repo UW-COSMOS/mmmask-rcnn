@@ -28,6 +28,7 @@ def match(regions, gt_boxes, device=torch.device("cpu"), silence=False):
     mask = best_score_pred == 0
     if mask.sum() > 0 and not silence:
         raise ValueError()
+    assert match_idxs_pred.shape[0] == regions.shape[0]
 
     return match_idxs_pred
 

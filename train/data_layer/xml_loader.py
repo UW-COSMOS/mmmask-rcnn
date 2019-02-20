@@ -195,8 +195,7 @@ class XMLLoader(Dataset):
             windows.append(img_data)
         # switch to list of tensors
         proposals_lst = [torch.tensor(prop) for prop in proposals_lst]
-        gt_box_lst = [torch.tensor(gt_box) for gt_box in gt_box_lst]
-        collected = list(zip(windows,gt_box_lst, labels, gt_box_lst))
+        collected = list(zip(windows,proposals_lst, labels))
         ret = [Example(*pt) for pt in collected]
         return ret
 
