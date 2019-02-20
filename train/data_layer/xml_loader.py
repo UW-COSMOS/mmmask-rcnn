@@ -18,7 +18,7 @@ from utils.matcher import match
 from collections import namedtuple
 from uuid import uuid4
 from tqdm import tqdm
-from utils.boundary_utils import centers_size
+from utils.bbox import BBoxes
 normalizer = NormalizeWrapper(mean=[0.485, 0.456, 0.406],
         std=[0.229, 0.224, 0.225])
 
@@ -43,7 +43,7 @@ def mapper(obj, preprocessor=None):
     cls = obj.find("name").text
     if preprocessor is not None:
         cls = preprocessor[cls]
-    return cls, (x, y, w, h)
+    return cls, (x, y, h,w)
 
 
 def xml2list(fp):
@@ -80,7 +80,7 @@ def load_proposal(base_path, identifier):
     path = os.path.join(base_path, f"{identifier}.csv")
     np_arr = genfromtxt(path, delimiter=",")
     bbox_absolute = torch.from_numpy(np_arr).reshape(-1,4)
-    return bbox_absolute
+    return BBoxes(bbox_absolute, "xyxy")
 
 def load_gt(xml_dir, identifier):
     """
@@ -97,7 +97,7 @@ def load_gt(xml_dir, identifier):
     else:
         cls_list, tensor_list = zip(*as_lst)
     # convert to tensors
-    gt_boxes = torch.tensor(tensor_list)
+    gt_boxes = BBoxes(torch.tensor(tensor_list),"xyhw")
     return gt_boxes, cls_list
 
 class XMLLoader(Dataset):
@@ -176,6 +176,7 @@ class XMLLoader(Dataset):
     def _unpack_page(self, page):
         img, gt, proposals, identifier = page
         gt_boxes, gt_cls = gt
+        print(type(gt_boxes))
         matches = match(proposals,gt_boxes)
         labels = [gt_cls[match] for match in matches]
         windows = []

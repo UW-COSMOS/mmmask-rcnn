@@ -16,7 +16,9 @@ def match(regions, gt_boxes, device=torch.device("cpu"), silence=False):
     """
     # get ious for each predicted box and gt target
     # get back an NxM tensor of IOUs
+    print(type(gt_boxes))
     overlaps = bbox_overlaps(regions, gt_boxes, device)
+
     assert overlaps.shape[0] == regions.shape[0]
     assert overlaps.shape[1] == gt_boxes.shape[0]
     

@@ -3,7 +3,7 @@ compute the overlap matrix
 Author: Josh McGrath
 """
 import torch
-from utils.boundary_utils import absolute_coords
+from utils.bbox import BBoxes
 X = 0
 Y = 1
 H = 2
@@ -18,12 +18,14 @@ def get_iou(bboxes, gt_box, device):
     :return: [L x 1]
     """
     L, _ = bboxes.shape
-    gt_box = gt_box.expand(L, 4)
+    gt_data = gt_box.data.squeeze()
+    gt_box = BBoxes(gt_data.expand(L, 4), gt_box.fmt)
     # convert to x1, y1, x2, y2
-    coords_bbox = absolute_coords(bboxes, device)
-
+    bboxes.change_format("xyxy")
+    coords_bbox = bboxes.data.clone()
     # do the same for the ground truth
-    coords_gt = absolute_coords(gt_box, device)
+    gt_box.change_format("xyxy")
+    coords_gt = gt_box.data
     # now use this to compute the aligned IoU
     i_boxes = torch.ones(L, 4).to(device)
     i_boxes[:, X] = torch.max(coords_bbox[:, X], coords_gt[:, X])
@@ -33,6 +35,8 @@ def get_iou(bboxes, gt_box, device):
     i_area = (i_boxes[:, X2] - i_boxes[:, X]) * (i_boxes[:, Y2] - i_boxes[:, Y])
     i_area[i_boxes[:, X2] < i_boxes[:, X]] = 0
     i_area[i_boxes[:, Y2] < i_boxes[:, Y]] = 0
+    bboxes.change_format("xyhw")
+    gt_box.change_format("xyhw")
     boxes_area = bboxes[:, W] * bboxes[:, H]
     gt_area = gt_box[:, W] * gt_box[:, H]
     return i_area / (boxes_area + gt_area - i_area)
@@ -52,6 +56,6 @@ def bbox_overlaps(bboxes, gt_boxes,device):
     K, _ = gt_boxes.shape
     overlaps = []
     for i in range(K):
-        overlap = get_iou(bboxes, gt_boxes[i, :],device)
+        overlap = get_iou(bboxes, BBoxes(gt_boxes[i, :].unsqueeze(0), gt_boxes.fmt),device)
         overlaps.append(overlap)
     return torch.stack(overlaps,dim=1)
