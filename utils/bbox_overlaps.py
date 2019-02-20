@@ -21,11 +21,12 @@ def get_iou(bboxes, gt_box, device):
     gt_data = gt_box.data.squeeze()
     gt_box = BBoxes(gt_data.expand(L, 4), gt_box.fmt)
     # convert to x1, y1, x2, y2
+
     bboxes.change_format("xyxy")
     coords_bbox = bboxes.data.clone()
     # do the same for the ground truth
     gt_box.change_format("xyxy")
-    coords_gt = gt_box.data
+    coords_gt = gt_box.data.clone()
     # now use this to compute the aligned IoU
     i_boxes = torch.ones(L, 4).to(device)
     i_boxes[:, X] = torch.max(coords_bbox[:, X], coords_gt[:, X])

@@ -25,6 +25,12 @@ class TestBBoxes(unittest.TestCase):
         bbox.change_format("xyhw")
         expect = BBoxes(torch.tensor([[10, 10, 20, 20]]), "xyhw")
         self.assertEqual(bbox, expect)
+        bbox.change_format("xyhw")
+        self.assertEqual(bbox,expect)
+        bbox.change_format("xyxy")
+
+        expect = BBoxes(self.tensor, self.fmt)
+        self.assertEqual(bbox, expect)
 
     def test_stack(self):
         bbox = BBoxes(self.tensor, self.fmt)

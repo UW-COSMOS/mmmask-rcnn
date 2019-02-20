@@ -21,12 +21,11 @@ class BBoxes:
             return
         if fmt == "xyxy":
             self.fmt = "xyxy"
-            L, _ = self.data.shape
-            bboxes = torch.ones(L, 4)
-            bboxes[:, X] = (self.data[:, X] + self.data[:, X2]) / 2.0
-            bboxes[:, Y] = (self.data[:, Y] + self.data[:, Y2]) / 2.0
-            bboxes[:, W] = (self.data[:, X2] - self.data[:, X])
-            bboxes[:, H] = (self.data[:, Y2] - self.data[:, Y])
+            bboxes = self.data.clone()
+            bboxes[:, X] = (self.data[:, X] - self.data[:,W]/2.0)
+            bboxes[:, Y] = (self.data[:, Y] - self.data[:, H]/ 2.0)
+            bboxes[:, X2] = (bboxes[:, X] + self.data[:, W])
+            bboxes[:, Y2] = (bboxes[:, Y] + self.data[:, H])
             self.data = bboxes
         elif fmt == "xyhw":
             self.fmt = "xyhw"
