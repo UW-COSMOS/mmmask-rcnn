@@ -14,7 +14,6 @@ from tqdm import tqdm
 from train.anchor_targets.head_target_layer import HeadTargetLayer
 from functools import partial
 from tensorboardX import SummaryWriter
-from utils.boundary_utils import centers_size
 from torch.utils.data import random_split
 
 
