@@ -127,7 +127,9 @@ class XMLLoader(Dataset):
         print(f"Constructed a {self.num_images} image dataset, ingesting to redis server")
         self.class_stats = {}
         self._ingest()
-        print("ingested to redis")
+        print("ingested to redis, printing class stats")
+        self.print_stats()
+
 
     def __len__(self):
         return len(self.uuids)
@@ -181,6 +183,14 @@ class XMLLoader(Dataset):
         collected = list(zip(windows,proposals_lst, labels, gt_box_lst))
         ret = [Example(*pt) for pt in collected]
         return ret
+
+    def print_stats(self):
+        tot = len(self.uuids)
+        print(f"There are {tot} objects")
+        for key in self.class_stats:
+            sub = self.class_stats[key]
+            percentage = float(sub)/tot
+            print(f"{key}: {sub} ({percentage})")
 
 
 
