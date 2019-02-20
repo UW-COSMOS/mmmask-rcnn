@@ -38,8 +38,8 @@ class MultiModalClassifier(nn.Module):
         :param roi_maps: [NxLxDHxW]
         :return:
         """
-        N, L, D, H, W = roi_maps.shape 
-        x = roi_maps.view(N,-1, self.depth * self.width * self.height)
+        N, D, H, W = roi_maps.shape
+        x = roi_maps.view(N, self.depth * self.width * self.height)
         x = self.FC(x)
         x = self.dropout(x)
         x = relu(x)
@@ -47,5 +47,5 @@ class MultiModalClassifier(nn.Module):
         x = self.dropout(x)
         x = relu(x)
         cls_scores = self.cls_branch(x)
-        return  cls_scores
+        return cls_scores
 

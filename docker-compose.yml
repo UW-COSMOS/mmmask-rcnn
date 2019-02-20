@@ -6,5 +6,12 @@ services:
         ipc: host
         volumes:
             - .:/vol/
+    redis:
+      image: "redis:alpine"
+      volumes:
+        - ./redis_data:/data
+      restart: always
+      ports:
+        - "6379:6379"
 
 

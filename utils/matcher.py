@@ -2,7 +2,8 @@ from .bbox_overlaps import bbox_overlaps
 import torch
 NEGATIVE = -1
 NEITHER = -2
-def match(regions, gt_boxes, device,):
+
+def match(regions, gt_boxes, device=torch.device("cpu")):
     """
     Get positive region indexes for each box
     :param regions: predicted regions [KA x 4]

@@ -11,10 +11,14 @@ class TestTrainingIntegration(unittest.TestCase):
     def setUp(self):
         self.cfg = ConfigManager("../data/model_config.yaml")
         self.model = MMFasterRCNN(self.cfg)
-        self.loader = XMLLoader("../data/images", "../data/annotations",
-                                "../data/proposals")
+        self.loader = XMLLoader(img_dir="../data/images",
+                                xml_dir="../data/annotations",
+                                proposal_dir="../data/proposals",
+                                img_type="jpg",
+                                host="localhost")
         self.device = torch.device("cpu")
-        self.params = yaml.load(open("../data/train_config.yaml"))
+        with open("../data/train_config.yaml") as fh:
+            self.params = yaml.load(fh)
 
     def test_init(self):
         trainer = TrainerHelper(self.model,
