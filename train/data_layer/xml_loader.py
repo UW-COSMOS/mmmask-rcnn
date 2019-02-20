@@ -176,8 +176,11 @@ class XMLLoader(Dataset):
     def _unpack_page(self, page):
         img, gt, proposals, identifier = page
         gt_boxes, gt_cls = gt
-        print(type(gt_boxes))
-        matches = match(proposals,gt_boxes)
+        try:
+            matches = match(proposals,gt_boxes)
+        except:
+            self.no_overlaps.append(identifier)
+            matches = match(proposals, gt_boxes,silence=True)
         labels = [gt_cls[match] for match in matches]
         windows = []
         proposals_lst = proposals.tolist()

@@ -26,8 +26,8 @@ def match(regions, gt_boxes, device=torch.device("cpu"), silence=False):
     # index back to targets
     best_score_pred, match_idxs_pred = torch.max(overlaps, dim=1)
     mask = best_score_pred == 0
-    if mask.sum() > 0:
-        print(mask.sum())
+    if mask.sum() > 0 and not silence:
+        raise ValueError()
 
     return match_idxs_pred
 

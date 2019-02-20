@@ -18,8 +18,13 @@ import matplotlib.pyplot as plt
 import os
 
 
-# TODO: Can clean this up. Some redundancy here
 def get_components(bmap, numpy=False):
+    '''
+    Given a binary map, output an 8-connected components region
+    :param bmap: Input binary map
+    :param numpy: By default we accept pytorch maps, but change this to True to pass in numpy array
+    :return: List of coordinates (tl_x, tl_y, br_x, br_y) corresponding to connected components 
+    '''
     if numpy:
         bmap = torch.from_numpy(bmap)
     label_map = np.zeros(bmap.shape)
@@ -135,65 +140,20 @@ def get_components(bmap, numpy=False):
     return list(components_list.values())
 
 
-def test_get_components():
-    test1 = torch.tensor((), dtype=torch.uint8).new_ones(20, 20)
-    components = get_components(test1)
-    expected = [(0, 0, 19, 19)]
-    result = get_components(test1)
-    if result != expected:
-        print(expected)
-        print('-----')
-        print(result)
-        raise Exception('test 1 test_get_components failed')
-            
-    test2 = torch.tensor((), dtype=torch.uint8).new_ones(20, 20)
-    test2[2, :] = 0
-    expected = [(0, 0, 1, 19), (3, 0, 19, 19)]
-    result = get_components(test2)
-    for element in expected:
-        if element not in result:
-            print(expected)
-            print('-----')
-            print(result)
-            raise Exception('test 2 test_get_components failed')
-    for element in result:
-        if element not in expected:
-            print(expected)
-            print('-----')
-            print(result)
-            raise Exception('test 3 test_get_components failed')
-
-    test3 = torch.tensor((), dtype=torch.uint8).new_ones(20, 20)
-    test3[2, :] = 0
-    test3[:, 10] = 0
-    expected = [(0, 0, 1, 9), (3, 0, 19, 9), (0, 11, 1, 19), (3, 11, 19, 19)]
-    result = get_components(test3)
-    for element in expected:
-        if element not in result:
-            print(expected)
-            print('-----')
-            print(result)
-            raise Exception('test 4 test_get_components failed')
-    for element in result:
-        if element not in expected:
-            print(expected)
-            print('-----')
-            print(result)
-            raise Exception('test 5 test_get_components failed')
-
-
-def write_proposals(img_p, output_dir='tmp/cc_proposals', white_thresh=245, blank_row_height=10):
-    img = Image.open(img_p)
-    fn = lambda x : 0 if x > white_thresh else 255
-    img_np = np.array(img.convert('RGB'))
-    bmap_np = np.array(img.convert('L').point(fn, mode='1')).astype(np.uint8)
-    img_height = bmap_np.shape[0]
+def balance_margins(bmap, img):
+    '''
+    Given an input binary map, balance possibly unequal margins. The motivation is to better determine the column number
+    :param bmap: Binary input map (numpy nd array)
+    :param img: Map of original image (np nd array)
+    :return: Adjusted bmap, Adjusted img, left margin difference (must adjust downstream)
+    '''
+    img_height = bmap.shape[0]
     zero_col = np.zeros(img_height)
     left_w, right_w = 0, 0
     stop_left, stop_right = False, False
-    for i in range(1, bmap_np.shape[1]):
-        left = bmap_np[:, i]
-        right = bmap_np[:, bmap_np.shape[1]-i]
+    for i in range(1, bmap.shape[1]):
+        left = bmap[:, i]
+        right = bmap[:, bmap.shape[1]-i]
         if not (left == zero_col).all():
             stop_left = True
         if not (right == zero_col).all():
@@ -201,11 +161,11 @@ def write_proposals(img_p, output_dir='tmp/cc_proposals', white_thresh=245, blan
         if stop_left and stop_right:
             diff = abs(left_w - right_w)
             if left_w < right_w:
-                img_np = img_np[:, :bmap_np.shape[1]-diff, :]
-                bmap_np = bmap_np[:, :bmap_np.shape[1]-diff]
+                img = img[:, :bmap.shape[1]-diff, :]
+                bmap = bmap[:, :bmap.shape[1]-diff]
             else:
-                img_np = img_np[:, diff:, :]
-                bmap_np = bmap_np[:, diff:]
+                img = img[:, diff:, :]
+                bmap = bmap[:, diff:]
             break
         elif stop_left:
             right_w += 1
@@ -214,6 +174,18 @@ def write_proposals(img_p, output_dir='tmp/cc_proposals', white_thresh=245, blan
         else:
             right_w += 1
             left_w += 1
+    l_diff = left_w - right_w if left_w > right_w else 0
+    return bmap, img, l_diff
+
+
+def write_proposals(img_p, output_dir='tmp/cc_proposals', white_thresh=245, blank_row_height=10):
+    img = Image.open(img_p)
+    fn = lambda x : 0 if x > white_thresh else 255
+    img_np = np.array(img.convert('RGB'))
+    bmap_np = np.array(img.convert('L').point(fn, mode='1')).astype(np.uint8)
+    img_np_orig = img_np
+    bmap_np, img_np, left_shave = balance_margins(bmap_np, img_np)
+    img_height = bmap_np.shape[0]
     num_sections = int(img_height / blank_row_height)
     blank_row = np.zeros((blank_row_height, bmap_np.shape[1]))
     curr_top = 0
@@ -294,15 +266,22 @@ def write_proposals(img_p, output_dir='tmp/cc_proposals', white_thresh=245, blan
         coords_list = block_coords2[key]
         for ind2, bc in enumerate(coords_list):
             tl_y1, tl_x1, br_y1, br_x1 = bc
-            block_coords.add((tl_x1, tl_y1, br_x1, br_y1))
+            adjusted = (left_shave + tl_x1, tl_y1, left_shave + br_x1, br_y1)
+            print(adjusted)
+            block_coords.add(adjusted)
+    print('----')
+
     block_coords = list(block_coords)
     img_p = os.path.basename(img_p)
     write_p = os.path.join(output_dir, img_p[:-4] + '.csv')
     write_img_p = os.path.join(output_dir, img_p)
-    with open(write_p, 'w') as wp:
+    with open(write_p, 'w', encoding='utf-8') as wp:
         for coord in block_coords:
             wp.write(f'{coord[0]},{coord[1]},{coord[2]},{coord[3]}\n')
-    draw_cc(img_np, block_coords, write_img_p=write_img_p)
+    print('CC Proposals img shape')
+    print(img_np_orig.shape)
+    print('-----')
+    draw_cc(img_np_orig, block_coords, write_img_p=write_img_p)
     return
 
 
@@ -364,65 +343,11 @@ def divide_row_into_columns(row, n_columns):
     col_idx.append(n_columns)
     return splits, coords, col_idx
 
-def test_divide_row_into_columns():
-    row = np.ones((1, 30))
-    actual, _ = divide_row_into_columns(row, 2)
-    expected = np.ones((1, 15))
-    for a in actual:
-        if a.shape != expected.shape:
-            print(f'Test 1 failed test_divide_row_into_columns(): expected: {expected.shape} actual: {a.shape}')
-
-    actual, _ = divide_row_into_columns(row, 3)
-    expected = np.ones((1, 10))
-    for a in actual:
-        if a.shape != expected.shape:
-            print(f'Test 2 failed test_divide_row_into_columns(): expected: {expected.shape} actual: {a.shape}')
-
-def test_get_columns_for_row():
-    row = np.ones((1, 10))
-    expected = 1
-    actual = get_columns_for_row(row)
-    if expected != actual:
-        print(f'Test 1 failed test_get_columns_for_row(): expected: {expected} actual: {actual}')
-
-    row = np.ones((2, 20))
-    row[:, 8:12] = 0
-    expected = 2
-    actual = get_columns_for_row(row)
-    if expected != actual:
-        print(f'Test 2 failed test_get_columns_for_row(): expected: {expected} actual: {actual}')
-
-    row = np.ones((60, 50))
-    row[:, 8:13] = 0
-    row[:, 18:23] = 0
-    row[:, 28:33] = 0
-    row[:, 38:43] = 0
-    expected = 5
-    actual = get_columns_for_row(row)
-    if expected != actual:
-        print(f'Test 3 failed test_get_columns_for_row(): expected: {expected} actual: {actual}')
-
 
 if __name__ == '__main__':
     pool = mp.Pool(processes=240)
     results = [pool.apply_async(write_proposals, args=(os.path.join('img',x),)) for x in os.listdir('img')]
     [r.get() for r in results]
-    print(results)
-    #test_divide_row_into_columns()
-    #test_get_columns_for_row()
-    #test_convert_image_to_binary_map()
-    #test_get_components()
-    #test_get_proposals()
-    #img = Image.open('1812.10437.pdf-0001.png')
-    #ts = ToTensor()
-    #tens = ts(img)
-    #tens = tens[:3, :, :]
-    #us = tens.unsqueeze(0)
-    #start = timer()
-    #proposals = get_proposals(us, output_blur=True)
-    #end = timer()
-    #print(f'Proposals timer: {end - start}')
-    #print(f'Number of proposals: {proposals.shape[1]}')
 
 
 
