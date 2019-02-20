@@ -24,6 +24,7 @@ cfg = ConfigManager(args.model_config)
 model = MMFasterRCNN(cfg)
 loader = XMLLoader(args.img_dir, args.xml_dir,
         args.proposals_dir,
+        cfg.CC_LAYER.WARPED_SIZE,
         "png")
 train_params = None
 with open(args.train_config) as fh:

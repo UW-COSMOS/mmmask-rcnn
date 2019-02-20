@@ -90,6 +90,7 @@ class TrainerHelper:
             for idx, batch in enumerate(tqdm(train_loader, desc="batches", leave=False)):
                 optimizer.zero_grad()
                 ex, gt_box, gt_cls, proposals = batch
+                ex = ex.to(self.device)
                 gt_cls = gt_cls.to(self.device)
                 gt_box = prep_gt_boxes(gt_box, self.device)
                 rois, cls_scores= self.model(ex, self.device, proposals=proposals)

@@ -11,3 +11,4 @@ imgaug
 dominate
 pytesseract
 Pillow
+redis
