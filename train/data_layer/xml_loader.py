@@ -198,7 +198,7 @@ class XMLLoader(Dataset):
         match_box_lst = []
         for idx in range(len(proposals_lst)):
             match_box_lst.append(torch.tensor(gt_box_lst[matches[idx]]))
-        collected = list(zip(windows,proposals_lst, match_box_lst,labels))
+        collected = list(zip(windows,proposals_lst,labels,match_box_lst))
         ret = [Example(*pt) for pt in collected]
         return ret
 

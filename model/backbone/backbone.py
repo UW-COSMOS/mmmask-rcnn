@@ -83,8 +83,9 @@ def get_resnet(nlayers=50):
     else:
         raise NotImplementedError()
     # now build from the base a sequential object with the subpieces of the network
-    backbone = nn.Sequential(*list(base.children())[:-2])
+    backbone = nn.Sequential(*list(base.children())[:-3])
     backbone.requires_grad = False
+    backbone = nn.Sequential(backbone, *list(base.children())[-3:-2])
     return backbone
 
 if __name__ == '__main__':

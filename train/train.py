@@ -82,7 +82,7 @@ class TrainerHelper:
                             num_workers=self.params["BATCH_SIZE"],
                             shuffle=True)
                             
-        self.model.train(mode=False)
+        self.model.train(mode=True)
         iteration = 0
         for epoch in tqdm(range(self.params["EPOCHS"]),desc="epochs"):
             tot_cls_loss = 0.0
@@ -126,6 +126,7 @@ class TrainerHelper:
                             num_workers=3)
         tot_cls_loss = 0.0
         torch.cuda.empty_cache()
+        self.model.train(mode=False)
         for batch in tqdm(loader, desc="validation"):
             ex, gt_box, gt_cls, proposals = batch
             ex = ex.to(self.device)
@@ -142,6 +143,7 @@ class TrainerHelper:
         self.output_batch_losses(
                                  tot_cls_loss/len(self.val_set),
                                  iteration)
+        self.model.train(mode=True)
 
 
 
